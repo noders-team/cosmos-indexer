@@ -1,10 +1,11 @@
 package core
 
 import (
-	"github.com/rs/zerolog/log"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/nodersteam/cosmos-indexer/clients"
 
@@ -63,7 +64,8 @@ func NewBlockRPCWorker(
 func (w *blockRPCWorker) Worker(wg *sync.WaitGroup,
 	blockEnqueueChan chan *EnqueueData,
 	result chan<- IndexerBlockEventData,
-	ignoreExisting bool) {
+	ignoreExisting bool,
+) {
 	defer wg.Done()
 	rpcClient := rpc.URIClient{
 		Address: w.chainClient.Config.RPCAddr,
