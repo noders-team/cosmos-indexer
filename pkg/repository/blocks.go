@@ -399,6 +399,7 @@ func (r *blocks) BlockSignatures(ctx context.Context, height int64, valAddress [
 	queryAll, _, err := dialect.
 		ClearSelect().
 		ClearLimit().
+		ClearOffset().
 		Select(goqu.COUNT("block_signatures.validator_address")).ToSQL()
 	if err != nil {
 		return nil, 0, err
