@@ -7,13 +7,13 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/nodersteam/cosmos-indexer/clients"
+	"github.com/noders-team/cosmos-indexer/clients"
 
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	txTypes "github.com/cosmos/cosmos-sdk/types/tx"
-	"github.com/nodersteam/cosmos-indexer/config"
-	dbTypes "github.com/nodersteam/cosmos-indexer/db"
-	"github.com/nodersteam/cosmos-indexer/rpc"
+	"github.com/noders-team/cosmos-indexer/config"
+	dbTypes "github.com/noders-team/cosmos-indexer/db"
+	"github.com/noders-team/cosmos-indexer/rpc"
 	"github.com/nodersteam/probe/client"
 	"gorm.io/gorm"
 )

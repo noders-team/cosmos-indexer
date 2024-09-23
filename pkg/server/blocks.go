@@ -8,16 +8,16 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/nodersteam/cosmos-indexer/pkg/repository"
+	"github.com/noders-team/cosmos-indexer/pkg/repository"
 
-	"github.com/nodersteam/cosmos-indexer/db/models"
+	"github.com/noders-team/cosmos-indexer/db/models"
 	"github.com/shopspring/decimal"
 
-	"github.com/nodersteam/cosmos-indexer/pkg/model"
-	"github.com/nodersteam/cosmos-indexer/pkg/service"
+	"github.com/noders-team/cosmos-indexer/pkg/model"
+	"github.com/noders-team/cosmos-indexer/pkg/service"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	pb "github.com/nodersteam/cosmos-indexer/proto"
+	pb "github.com/noders-team/cosmos-indexer/proto"
 )
 
 type blocksServer struct {

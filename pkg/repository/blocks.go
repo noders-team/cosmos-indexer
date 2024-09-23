@@ -12,7 +12,7 @@ import (
 
 	goqu "github.com/doug-martin/goqu/v9"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nodersteam/cosmos-indexer/pkg/model"
+	"github.com/noders-team/cosmos-indexer/pkg/model"
 )
 
 type Blocks interface {

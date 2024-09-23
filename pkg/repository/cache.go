@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nodersteam/cosmos-indexer/db/models"
+	"github.com/noders-team/cosmos-indexer/db/models"
 
-	"github.com/nodersteam/cosmos-indexer/pkg/model"
+	"github.com/noders-team/cosmos-indexer/pkg/model"
 	"github.com/redis/go-redis/v9"
 )
 

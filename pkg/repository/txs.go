@@ -13,8 +13,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/nodersteam/cosmos-indexer/db/models"
-	"github.com/nodersteam/cosmos-indexer/pkg/model"
+	"github.com/noders-team/cosmos-indexer/db/models"
+	"github.com/noders-team/cosmos-indexer/pkg/model"
 	"github.com/rs/zerolog/log"
 	"github.com/shopspring/decimal"
 )

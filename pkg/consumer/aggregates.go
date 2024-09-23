@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/nodersteam/cosmos-indexer/pkg/model"
-	"github.com/nodersteam/cosmos-indexer/pkg/repository"
+	"github.com/noders-team/cosmos-indexer/pkg/model"
+	"github.com/noders-team/cosmos-indexer/pkg/repository"
 	"github.com/rs/zerolog/log"
 )
 

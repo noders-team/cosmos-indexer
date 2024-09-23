@@ -6,7 +6,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/nodersteam/cosmos-indexer/cosmos/modules/tx"
+	"github.com/noders-team/cosmos-indexer/cosmos/modules/tx"
 )
 
 var apiEndpoints = map[string]string{

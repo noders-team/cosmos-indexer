@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/nodersteam/cosmos-indexer/util"
+	"github.com/noders-team/cosmos-indexer/util"
 	"github.com/spf13/cobra"
 )
 

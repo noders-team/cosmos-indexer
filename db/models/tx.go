@@ -3,7 +3,7 @@ package models
 import (
 	"time"
 
-	"github.com/nodersteam/cosmos-indexer/pkg/model"
+	"github.com/noders-team/cosmos-indexer/pkg/model"
 
 	"github.com/lib/pq"
 
