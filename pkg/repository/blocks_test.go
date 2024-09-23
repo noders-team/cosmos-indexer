@@ -228,13 +228,10 @@ VALUES
 	_, err = postgresConn.Exec(context.Background(), sampleSignatures)
 	require.NoError(t, err)
 
-	validatorForTest := "val_addr1"
-	emptyVal := ""
-
 	tests := []struct {
 		name       string
 		height     int64
-		valAddress *string
+		valAddress []string
 		result     expected
 	}{
 		{
@@ -250,7 +247,7 @@ VALUES
 		{
 			"success",
 			1000,
-			&emptyVal,
+			make([]string, 0),
 			expected{total: 3, bl: []*model.BlockSigners{
 				{BlockHeight: 1000, Validator: "val_addr1"},
 				{BlockHeight: 1000, Validator: "val_addr2"},
@@ -260,7 +257,7 @@ VALUES
 		{
 			"success_with_validator",
 			1000,
-			&validatorForTest,
+			[]string{"val_addr1"},
 			expected{total: 1, bl: []*model.BlockSigners{
 				{BlockHeight: 1000, Validator: "val_addr1"},
 			}},
