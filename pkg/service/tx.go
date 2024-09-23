@@ -9,11 +9,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 
-	"github.com/nodersteam/cosmos-indexer/db/models"
+	"github.com/noders-team/cosmos-indexer/db/models"
 	"github.com/rs/zerolog/log"
 
-	"github.com/nodersteam/cosmos-indexer/pkg/model"
-	"github.com/nodersteam/cosmos-indexer/pkg/repository"
+	"github.com/noders-team/cosmos-indexer/pkg/model"
+	"github.com/noders-team/cosmos-indexer/pkg/repository"
 )
 
 type Txs interface {

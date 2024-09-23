@@ -3,8 +3,8 @@ package clients
 import (
 	"testing"
 
-	"github.com/nodersteam/cosmos-indexer/config"
-	"github.com/nodersteam/cosmos-indexer/probe"
+	"github.com/noders-team/cosmos-indexer/config"
+	"github.com/noders-team/cosmos-indexer/probe"
 	"github.com/stretchr/testify/require"
 )
 

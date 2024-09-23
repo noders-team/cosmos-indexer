@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nodersteam/cosmos-indexer/config"
-	"github.com/nodersteam/cosmos-indexer/db/models"
+	"github.com/noders-team/cosmos-indexer/config"
+	"github.com/noders-team/cosmos-indexer/db/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

@@ -1,8 +1,8 @@
 package db
 
 import (
-	"github.com/nodersteam/cosmos-indexer/db/models"
-	"github.com/nodersteam/cosmos-indexer/parsers"
+	"github.com/noders-team/cosmos-indexer/db/models"
+	"github.com/noders-team/cosmos-indexer/parsers"
 )
 
 type BlockDBWrapper struct {

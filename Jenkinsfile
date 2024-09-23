@@ -69,7 +69,7 @@ pipeline {
 void setBuildStatus(String message, String state) {
     step([
             $class: "GitHubCommitStatusSetter",
-            reposSource: [$class: "ManuallyEnteredRepositorySource", url: "https://github.com/nodersteam/cosmos-indexer.git"],
+            reposSource: [$class: "ManuallyEnteredRepositorySource", url: "https://github.com/noders-team/cosmos-indexer.git"],
             contextSource: [$class: "ManuallyEnteredCommitContextSource", context: "ci/jenkins/build-status"],
             errorHandlers: [[$class: "ChangingBuildStatusErrorHandler", result: "SUCCESS"]],
             statusResultSource: [ $class: "ConditionalStatusResultSource", results: [[$class: "AnyBuildResult", message: message, state: state]] ]
@@ -263,5 +263,5 @@ void checkoutBranch(branch) {
                branches: [[ name: "${branch}" ]],
                userRemoteConfigs: [[
                credentialsId: 'robert_gh',
-               url: "https://github.com/nodersteam/cosmos-indexer.git"]]])
+               url: "https://github.com/noders-team/cosmos-indexer.git"]]])
 }

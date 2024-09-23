@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nodersteam/cosmos-indexer/clients"
+	"github.com/noders-team/cosmos-indexer/clients"
 	"github.com/rs/zerolog/log"
 
-	"github.com/nodersteam/cosmos-indexer/config"
-	dbTypes "github.com/nodersteam/cosmos-indexer/db"
-	"github.com/nodersteam/cosmos-indexer/db/models"
-	"github.com/nodersteam/cosmos-indexer/util"
+	"github.com/noders-team/cosmos-indexer/config"
+	dbTypes "github.com/noders-team/cosmos-indexer/db"
+	"github.com/noders-team/cosmos-indexer/db/models"
+	"github.com/noders-team/cosmos-indexer/util"
 	"gorm.io/gorm"
 )
 
