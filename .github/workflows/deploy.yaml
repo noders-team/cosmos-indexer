@@ -56,11 +56,11 @@ jobs:
             fi
 
             # Check if the Postgres container is running, and start it if not
-            if [ $(sudo docker ps -a --filter "name=^postgres$" --format "{{.Names}}" | wc -l) -eq 0 ]; then
-              sudo docker run -d --name postgres \
+            if [ $(sudo docker ps -a --filter "name=^postgres_indexer$" --format "{{.Names}}" | wc -l) -eq 0 ]; then
+              sudo docker run -d --name postgres_indexer \
                 --restart unless-stopped \
                 --shm-size=1g \
-                -v indexer_postgres:/var/lib/postgresql/data \
+                -v postgres_indexer:/var/lib/postgresql/data \
                 -e POSTGRES_USER=${{ secrets.POSTGRES_USER }} \
                 -e POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} \
                 -e POSTGRES_DB=postgres \
@@ -87,10 +87,10 @@ jobs:
               sudo docker run -d --name mongo \
                 --restart unless-stopped \
                 --shm-size=1g \
-                -e MONGO_INITDB_DATABASE=search_indexer \
+                -e MONGO_INITDB_DATABASE=mongo \
                 -e MONGO_INITDB_ROOT_USERNAME=${{ secrets.MONGO_USER }} \
                 -e MONGO_INITDB_ROOT_PASSWORD=${{ secrets.MONGO_PASSWORD }} \
-                -v indexer_mongo:/data/db \
+                -v mongo_indexer:/data/db \
                 -p 27017:27017 \
                 --network indexer_network \
                 mongo:5.0.2
@@ -129,7 +129,7 @@ jobs:
                 --server.port=9002 \
                 --redis.addr=redis:6379 \
                 --mongo.addr=mongodb://${{ secrets.MONGO_USER }}:${{ secrets.MONGO_PASSWORD }}@mongo:27017 \
-                --mongo.db=search_indexer"
+                --mongo.db=mongo"
 
             # Clean up unused Docker resources
             sudo docker system prune -f
