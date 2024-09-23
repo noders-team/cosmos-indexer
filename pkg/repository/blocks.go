@@ -21,7 +21,7 @@ type Blocks interface {
 	GetBlockValidators(ctx context.Context, block int32) ([]string, error)
 	TotalBlocks(ctx context.Context, to time.Time) (*model.TotalBlocks, error)
 	Blocks(ctx context.Context, limit int64, offset int64) ([]*model.BlockInfo, int64, error)
-	BlockSignatures(ctx context.Context, height int64, valAddress *string,
+	BlockSignatures(ctx context.Context, height int64, valAddress []string,
 		limit int64, offset int64) ([]*model.BlockSigners, int64, error)
 	BlockUptime(ctx context.Context, blockWindow, height int64,
 		validatorAddr string) (float32, error)
@@ -362,7 +362,7 @@ func (r *blocks) blockGas(ctx context.Context, height int64) (decimal.Decimal, d
 	return gasUsed, gasWanted, nil
 }
 
-func (r *blocks) BlockSignatures(ctx context.Context, height int64, valAddress *string, limit int64, offset int64) ([]*model.BlockSigners, int64, error) {
+func (r *blocks) BlockSignatures(ctx context.Context, height int64, valAddress []string, limit int64, offset int64) ([]*model.BlockSigners, int64, error) {
 	dialect := goqu.Select("blocks.height", "block_signatures.validator_address", "block_signatures.timestamp").
 		From(goqu.T("block_signatures")).
 		LeftJoin(
@@ -371,8 +371,8 @@ func (r *blocks) BlockSignatures(ctx context.Context, height int64, valAddress *
 
 	whereExp := make([]goqu.Expression, 0)
 	whereExp = append(whereExp, goqu.C("height").Eq(height))
-	if valAddress != nil && *valAddress != "" {
-		whereExp = append(whereExp, goqu.C("validator_address").Eq(*valAddress))
+	if len(valAddress) > 0 {
+		whereExp = append(whereExp, goqu.C("validator_address").In(valAddress))
 	}
 	dialect = dialect.Where(whereExp...)
 	dialect = dialect.Limit(uint(limit)).Offset(uint(offset))
