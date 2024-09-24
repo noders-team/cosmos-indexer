@@ -106,6 +106,7 @@ jobs:
 
             # Start a new cosmos-indexer container with environment variables
             sudo docker run -d --name cosmos-indexer \
+              -p 9012:9012 \
               --restart unless-stopped \
               --network indexer_network \
               ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }} \
@@ -113,16 +114,19 @@ jobs:
                 --log.pretty=true \
                 --log.level=info \
                 --base.start-block=${{ vars.BASE_START_BLOCK }} \
-                --base.end-block -1 \
-                --base.throttling 2.005 \
-                --base.rpc-workers 10 \
-                --base.index-transactions true \
-                --base.index-block-events true \
+                --base.end-block=${{ vars.BASE_END_BLOCK || -1 }} \
+                --base.throttling=${{ vars.BASE_THROTTLING || 2.005 }} \
+                --base.rpc-workers=${{ vars.BASE_RPC_WORKERS || 10 }} \
+                --base.index-transactions=${{ vars.BASE_INDEX_TRANSACTIONS || true }} \
+                --base.index-block-events=${{ vars.BASE_INDEX_BLOCK_EVENTS || true }} \
+                --base.reindex=${{ vars.BASE_REINDEX || false }} \
+                --base.genesis-index=${{ vars.BASE_GENESIS_INDEX || false }} \
+                --base.genesis-blocks-step=${{ vars.BASE_GENESIS_BLOCKS_STEP || 5000}} \
                 --probe.rpc=${{ vars.PROBE_RPC }} \
                 --probe.account-prefix=${{ vars.PROBE_ACCOUNT_PREFIX }} \
                 --probe.chain-id=${{ vars.PROBE_CHAIN_ID }} \
                 --probe.chain-name=${{ vars.PROBE_CHAIN_NAME }} \
-                --database.host=postgres \
+                --database.host=postgres_indexer \
                 --database.database=postgres \
                 --database.user=${{ secrets.POSTGRES_USER }} \
                 --database.password=${{ secrets.POSTGRES_PASSWORD }} \
