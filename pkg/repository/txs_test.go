@@ -664,3 +664,58 @@ func TestTxs_DelegatesByValidator(t *testing.T) {
 	require.Equal(t, sum.Amount, "100600")
 	require.Equal(t, sum.Denom, "utia")
 }
+
+func Test_GetVotesByAccounts(t *testing.T) {
+	defer func() {
+		_, err := postgresConn.Exec(context.Background(), `delete from votes_normalized`)
+		require.NoError(t, err)
+	}()
+
+	votes := `INSERT INTO votes_normalized(hash, weight, proposal_id, height, timestamp, option, voter)
+				VALUES('hash1', '1000', '2', 900, $1, 'YES', 'voter1'),
+				      ('hash2', '2000', '2', 900, $1, 'NO', 'voter2'),
+				      ('hash21', '2000', '2', 900, $1, 'YES', 'voter7'),
+				      ('hash3', '2000', '2', 900, $1, 'ABSTAIN', 'voter3'),
+				      ('hash4', '2000', '2', 900, $1, 'NO_VETO', 'voter4'),
+				      ('hash5', '2000', '3', 900, $1, 'YES', 'voter4'),
+				      ('hash51', '2000', '3', 900, $1, 'YES', 'voter7')`
+	_, err := postgresConn.Exec(context.Background(), votes, time.Now().UTC())
+	require.NoError(t, err)
+
+	txsRepo := NewTxs(postgresConn)
+	res, all, err := txsRepo.GetVotesByAccounts(context.Background(),
+		[]string{"voter1"}, false,
+		"YES", 2, nil, 100, 0)
+	require.NoError(t, err)
+	require.Equal(t, all, int64(1))
+	require.Len(t, res, 1)
+
+	res, all, err = txsRepo.GetVotesByAccounts(context.Background(),
+		[]string{"voter1", "voter7"}, false,
+		"YES", 2, nil, 100, 0)
+	require.NoError(t, err)
+	require.Equal(t, all, int64(2))
+	require.Len(t, res, 2)
+
+	res, all, err = txsRepo.GetVotesByAccounts(context.Background(),
+		[]string{"voter1"}, true,
+		"YES", 2, nil, 100, 0)
+	require.NoError(t, err)
+	require.Equal(t, all, int64(1))
+	require.Len(t, res, 1)
+
+	filterBy := "voter7"
+	res, all, err = txsRepo.GetVotesByAccounts(context.Background(),
+		[]string{"voter1", "voter7"}, true,
+		"YES", 2, &filterBy, 100, 0)
+	require.NoError(t, err)
+	require.Equal(t, all, int64(0))
+	require.Len(t, res, 0)
+
+	res, all, err = txsRepo.GetVotesByAccounts(context.Background(),
+		[]string{"voter1", "voter4"}, true,
+		"YES", 3, &filterBy, 100, 0)
+	require.NoError(t, err)
+	require.Equal(t, all, int64(1))
+	require.Len(t, res, 1)
+}

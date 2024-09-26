@@ -429,6 +429,7 @@ message GetVotesByAccountsRequest{
   string vote_type = 3;
   int32 proposalID = 4;
   Limit limit = 5;
+  optional string account_addr = 6;
 }
 
 message GetVotesByAccountsResponse{

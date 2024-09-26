@@ -38,8 +38,8 @@ type Txs interface {
 	TransactionsByEventValue(ctx context.Context, values []string, messageType []string, includeEvents bool,
 		limit int64, offset int64) ([]*models.Tx, int64, error)
 	GetVotes(ctx context.Context, accountAddress string) ([]*model.VotesTransaction, error)
-	GetVotesByAccounts(ctx context.Context, accounts []string, excludeAccounts bool, voteType string,
-		proposalID int, limit int64, offset int64) ([]*model.VotesTransaction, int64, error)
+	GetVotesByAccounts(ctx context.Context, accounts []string, excludeAccounts bool, voteOption string,
+		proposalID int, byAccAddress *string, limit int64, offset int64) ([]*model.VotesTransaction, int64, error)
 	GetWalletsCountPerPeriod(ctx context.Context, startDate, endDate time.Time) (int64, error)
 	GetWalletsWithTx(ctx context.Context, limit int64, offset int64) ([]*model.WalletWithTxs, int64, error)
 	TxCountByAccounts(ctx context.Context, accounts []string) ([]*model.WalletWithTxs, error)
@@ -990,15 +990,35 @@ func (r *txs) GetVotes(ctx context.Context, accountAddress string) ([]*model.Vot
 }
 
 func (r *txs) GetVotesByAccounts(ctx context.Context, accounts []string, excludeAccounts bool, voteOption string,
-	proposalID int, limit int64, offset int64,
+	proposalID int, byAccAddress *string, limit int64, offset int64,
 ) ([]*model.VotesTransaction, int64, error) {
-	replace := " "
+	dialect := goqu.Select(
+		"vn.hash",
+		"vn.weight",
+		"vn.height",
+		"vn.timestamp",
+		"vn.option",
+		"vn.voter").
+		From(goqu.T("votes_normalized").As("vn"))
 	if excludeAccounts {
-		replace = "NOT"
+		dialect = dialect.Where(goqu.I("vn.voter").NotIn(accounts))
+	} else {
+		dialect = dialect.Where(goqu.I("vn.voter").In(accounts))
 	}
-	queryTxs := `SELECT vn.hash, vn.weight, vn.height, vn.timestamp, vn.option, vn.voter FROM votes_normalized vn WHERE %s vn.voter=ANY($1) AND vn.option=$2 AND vn.proposal_id=$3 
-                                  ORDER BY timestamp DESC LIMIT $4::integer OFFSET $5::integer;`
-	rows, err := r.db.Query(ctx, fmt.Sprintf(queryTxs, replace), accounts, voteOption, fmt.Sprintf("%d", proposalID), limit, offset)
+	dialect = dialect.
+		Where(goqu.I("vn.option").Eq(voteOption)).
+		Where(goqu.I("vn.proposal_id").Eq(fmt.Sprintf("%d", proposalID)))
+
+	if byAccAddress != nil && *byAccAddress != "" {
+		dialect = dialect.Where(goqu.I("vn.voter").Eq(byAccAddress))
+	}
+	dialect = dialect.Order(goqu.I("vn.timestamp").Desc()).Limit(uint(limit)).Offset(uint(offset))
+
+	query, args, err := dialect.ToSQL()
+	if err != nil {
+		return nil, 0, err
+	}
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		log.Err(err).Msgf("error getting votes by accounts")
 		return nil, 0, err
@@ -1016,9 +1036,17 @@ func (r *txs) GetVotesByAccounts(ctx context.Context, accounts []string, exclude
 		data = append(data, &vote)
 	}
 
-	queryAll := `SELECT COUNT(distinct vn.hash) FROM votes_normalized vn WHERE %s vn.voter=ANY($1) AND vn.option=$2 AND vn.proposal_id=$3;`
+	queryAll, args, err := dialect.
+		ClearSelect().
+		ClearLimit().
+		ClearOffset().
+		ClearOrder().
+		SelectDistinct(goqu.COUNT("vn.hash")).ToSQL()
+	if err != nil {
+		return nil, 0, err
+	}
+	row := r.db.QueryRow(ctx, queryAll, args...)
 	var all int64
-	row := r.db.QueryRow(ctx, fmt.Sprintf(queryAll, replace), accounts, voteOption, fmt.Sprintf("%d", proposalID))
 	if err = row.Scan(&all); err != nil {
 		log.Err(err).Msgf("error getting total amount")
 		return nil, 0, err

@@ -380,6 +380,18 @@ create unique index "messageAttributeIndex"
 `
 	migrations = append(migrations, queryTxDelegates)
 
+	queryVotesNormalised := `create table votes_normalized
+(
+    hash         text,
+    weight       text,
+    proposal_id text,
+    height 		 bigint,
+    timestamp    timestamp with time zone,
+    option       text,
+    voter        text
+);`
+	migrations = append(migrations, queryVotesNormalised)
+
 	for _, query := range migrations {
 		_, err := postgresConn.Exec(ctx, query)
 		if err != nil {
