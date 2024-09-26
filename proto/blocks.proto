@@ -429,6 +429,8 @@ message GetVotesByAccountsRequest{
   string vote_type = 3;
   int32 proposalID = 4;
   Limit limit = 5;
+  optional string account_addr = 6;
+  optional SortBy sort = 7;
 }
 
 message GetVotesByAccountsResponse{
@@ -489,4 +491,9 @@ message DelegatesByValidatorResponse{
   Denom totalSum = 1;
   repeated TxByHash tx = 2;
   Result result = 3;
+}
+
+message SortBy{
+  string sort_by = 1;
+  string direction = 2;
 }

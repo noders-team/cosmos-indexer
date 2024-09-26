@@ -595,8 +595,16 @@ func (r *blocksServer) TransactionsByEventValue(ctx context.Context,
 func (r *blocksServer) GetVotesByAccounts(ctx context.Context,
 	in *pb.GetVotesByAccountsRequest,
 ) (*pb.GetVotesByAccountsResponse, error) {
+	var sortBy *model.SortBy
+	if in.Sort != nil {
+		sortBy = &model.SortBy{
+			By:        in.Sort.SortBy,
+			Direction: in.Sort.Direction,
+		}
+	}
+
 	transactions, all, err := r.srvTx.GetVotesByAccounts(ctx, in.Accounts, in.Exclude,
-		in.VoteType, int(in.ProposalID), in.Limit.Limit, in.Limit.Offset)
+		in.VoteType, int(in.ProposalID), in.AccountAddr, in.Limit.Limit, in.Limit.Offset, sortBy)
 	if err != nil {
 		return &pb.GetVotesByAccountsResponse{}, err
 	}

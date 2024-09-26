@@ -82,3 +82,8 @@ type AccountInfo struct {
 	TotalReceived        DecCoin
 	TotalSpent           DecCoin
 }
+
+type SortBy struct {
+	By        string
+	Direction string
+}
