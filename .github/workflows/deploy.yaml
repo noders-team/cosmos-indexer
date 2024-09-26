@@ -77,7 +77,7 @@ jobs:
                 --restart unless-stopped \
                 -p 6379:6379 \
                 --network indexer_network \
-                redis:7.4.0-alpine
+                redis
             else
               echo "Redis container is already running."
             fi
