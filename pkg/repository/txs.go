@@ -39,7 +39,7 @@ type Txs interface {
 		limit int64, offset int64) ([]*models.Tx, int64, error)
 	GetVotes(ctx context.Context, accountAddress string) ([]*model.VotesTransaction, error)
 	GetVotesByAccounts(ctx context.Context, accounts []string, excludeAccounts bool, voteOption string,
-		proposalID int, byAccAddress *string, limit int64, offset int64) ([]*model.VotesTransaction, int64, error)
+		proposalID int, byAccAddress *string, limit int64, offset int64, sortBy *model.SortBy) ([]*model.VotesTransaction, int64, error)
 	GetWalletsCountPerPeriod(ctx context.Context, startDate, endDate time.Time) (int64, error)
 	GetWalletsWithTx(ctx context.Context, limit int64, offset int64) ([]*model.WalletWithTxs, int64, error)
 	TxCountByAccounts(ctx context.Context, accounts []string) ([]*model.WalletWithTxs, error)
@@ -990,7 +990,7 @@ func (r *txs) GetVotes(ctx context.Context, accountAddress string) ([]*model.Vot
 }
 
 func (r *txs) GetVotesByAccounts(ctx context.Context, accounts []string, excludeAccounts bool, voteOption string,
-	proposalID int, byAccAddress *string, limit int64, offset int64,
+	proposalID int, byAccAddress *string, limit int64, offset int64, sortBy *model.SortBy,
 ) ([]*model.VotesTransaction, int64, error) {
 	dialect := goqu.Select(
 		"vn.hash",
@@ -1000,10 +1000,12 @@ func (r *txs) GetVotesByAccounts(ctx context.Context, accounts []string, exclude
 		"vn.option",
 		"vn.voter").
 		From(goqu.T("votes_normalized").As("vn"))
-	if excludeAccounts {
-		dialect = dialect.Where(goqu.I("vn.voter").NotIn(accounts))
-	} else {
-		dialect = dialect.Where(goqu.I("vn.voter").In(accounts))
+	if len(accounts) > 0 {
+		if excludeAccounts {
+			dialect = dialect.Where(goqu.I("vn.voter").NotIn(accounts))
+		} else {
+			dialect = dialect.Where(goqu.I("vn.voter").In(accounts))
+		}
 	}
 	dialect = dialect.
 		Where(goqu.I("vn.option").Eq(voteOption)).
@@ -1012,7 +1014,16 @@ func (r *txs) GetVotesByAccounts(ctx context.Context, accounts []string, exclude
 	if byAccAddress != nil && *byAccAddress != "" {
 		dialect = dialect.Where(goqu.I("vn.voter").Eq(byAccAddress))
 	}
-	dialect = dialect.Order(goqu.I("vn.timestamp").Desc()).Limit(uint(limit)).Offset(uint(offset))
+	if sortBy != nil && sortBy.By != "" {
+		if strings.EqualFold(sortBy.Direction, "asc") {
+			dialect = dialect.Order(goqu.I(fmt.Sprintf("vn.%s", sortBy.By)).Asc())
+		} else {
+			dialect = dialect.Order(goqu.I(fmt.Sprintf("vn.%s", sortBy.By)).Desc())
+		}
+	} else {
+		dialect = dialect.Order(goqu.I("vn.timestamp").Desc())
+	}
+	dialect = dialect.Limit(uint(limit)).Offset(uint(offset))
 
 	query, args, err := dialect.ToSQL()
 	if err != nil {

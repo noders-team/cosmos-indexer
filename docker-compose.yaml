@@ -93,7 +93,7 @@ services:
       --base.rpc-workers 1 \
       --base.index-transactions true \
       --base.index-block-events true \
-      --probe.rpc http://162.55.216.79:26657 \
+      --probe.rpc http://65.21.83.57:26657 \
       --probe.account-prefix celestia \
       --probe.chain-id celestia \
       --probe.chain-name celestia \

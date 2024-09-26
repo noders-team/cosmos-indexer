@@ -38,7 +38,7 @@ type Txs interface {
 	TransactionsByEventValue(ctx context.Context, values []string,
 		messageType []string, limit int64, offset int64) ([]*models.Tx, int64, error)
 	GetVotesByAccounts(ctx context.Context, accounts []string, excludeAcc bool, voteType string,
-		proposalID int, byAccAddress *string, limit int64, offset int64) ([]*model.VotesTransaction, int64, error)
+		proposalID int, byAccAddress *string, limit int64, offset int64, sortBy *model.SortBy) ([]*model.VotesTransaction, int64, error)
 	GetWalletsCountPerPeriod(ctx context.Context, startDate, endDate time.Time) (int64, error)
 	GetWalletsWithTx(ctx context.Context, limit int64, offset int64) ([]*model.WalletWithTxs, int64, error)
 	TxCountByAccounts(ctx context.Context, accounts []string) ([]*model.WalletWithTxs, error)
@@ -161,9 +161,9 @@ func (s *txs) TransactionsByEventValue(ctx context.Context, values []string,
 }
 
 func (s *txs) GetVotesByAccounts(ctx context.Context, accounts []string, excludeAcc bool, voteType string,
-	proposalID int, byAccAddress *string, limit int64, offset int64,
+	proposalID int, byAccAddress *string, limit int64, offset int64, sortBy *model.SortBy,
 ) ([]*model.VotesTransaction, int64, error) {
-	return s.txRepo.GetVotesByAccounts(ctx, accounts, excludeAcc, voteType, proposalID, byAccAddress, limit, offset)
+	return s.txRepo.GetVotesByAccounts(ctx, accounts, excludeAcc, voteType, proposalID, byAccAddress, limit, offset, sortBy)
 }
 
 func (s *txs) GetWalletsCountPerPeriod(ctx context.Context, startDate, endDate time.Time) (int64, error) {

@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/noders-team/cosmos-indexer/pkg/model"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"
@@ -685,21 +687,21 @@ func Test_GetVotesByAccounts(t *testing.T) {
 	txsRepo := NewTxs(postgresConn)
 	res, all, err := txsRepo.GetVotesByAccounts(context.Background(),
 		[]string{"voter1"}, false,
-		"YES", 2, nil, 100, 0)
+		"YES", 2, nil, 100, 0, nil)
 	require.NoError(t, err)
 	require.Equal(t, all, int64(1))
 	require.Len(t, res, 1)
 
 	res, all, err = txsRepo.GetVotesByAccounts(context.Background(),
 		[]string{"voter1", "voter7"}, false,
-		"YES", 2, nil, 100, 0)
+		"YES", 2, nil, 100, 0, nil)
 	require.NoError(t, err)
 	require.Equal(t, all, int64(2))
 	require.Len(t, res, 2)
 
 	res, all, err = txsRepo.GetVotesByAccounts(context.Background(),
 		[]string{"voter1"}, true,
-		"YES", 2, nil, 100, 0)
+		"YES", 2, nil, 100, 0, nil)
 	require.NoError(t, err)
 	require.Equal(t, all, int64(1))
 	require.Len(t, res, 1)
@@ -707,14 +709,22 @@ func Test_GetVotesByAccounts(t *testing.T) {
 	filterBy := "voter7"
 	res, all, err = txsRepo.GetVotesByAccounts(context.Background(),
 		[]string{"voter1", "voter7"}, true,
-		"YES", 2, &filterBy, 100, 0)
+		"YES", 2, &filterBy, 100, 0, nil)
 	require.NoError(t, err)
 	require.Equal(t, all, int64(0))
 	require.Len(t, res, 0)
 
 	res, all, err = txsRepo.GetVotesByAccounts(context.Background(),
 		[]string{"voter1", "voter4"}, true,
-		"YES", 3, &filterBy, 100, 0)
+		"YES", 3, &filterBy, 100, 0, nil)
+	require.NoError(t, err)
+	require.Equal(t, all, int64(1))
+	require.Len(t, res, 1)
+
+	res, all, err = txsRepo.GetVotesByAccounts(context.Background(),
+		[]string{"voter1", "voter4"}, true,
+		"YES", 3, &filterBy, 100, 0,
+		&model.SortBy{By: "timestamp", Direction: "desc"})
 	require.NoError(t, err)
 	require.Equal(t, all, int64(1))
 	require.Len(t, res, 1)
