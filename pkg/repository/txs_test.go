@@ -729,3 +729,47 @@ func Test_GetVotesByAccounts(t *testing.T) {
 	require.Equal(t, all, int64(1))
 	require.Len(t, res, 1)
 }
+
+func Test_GetProposalDeposits(t *testing.T) {
+	defer func() {
+		_, err := postgresConn.Exec(context.Background(), `delete from depositors_normalized`)
+		require.NoError(t, err)
+	}()
+
+	query := `INSERT INTO depositors_normalized(id, hash, timestamp, proposal_id, height, sender, amount, denom)
+				VALUES(1, 'hash-11', now(), 2, 1, 'sender-1', 10000, 'tia'),
+				      (1, 'hash-1122', now(), 3, 1, 'sender-1', 1000000, 'tia')`
+	_, err := postgresConn.Exec(context.Background(), query)
+	require.NoError(t, err)
+
+	txsRepo := NewTxs(postgresConn)
+	res, all, err := txsRepo.ProposalDepositors(context.Background(),
+		2, nil, 100, 0)
+	require.NoError(t, err)
+	require.Equal(t, all, int64(1))
+	require.Len(t, res, 1)
+
+	res, all, err = txsRepo.ProposalDepositors(context.Background(),
+		3, nil, 100, 0)
+	require.NoError(t, err)
+	require.Equal(t, all, int64(1))
+	require.Len(t, res, 1)
+
+	res, all, err = txsRepo.ProposalDepositors(context.Background(),
+		7, nil, 100, 0)
+	require.NoError(t, err)
+	require.Equal(t, all, int64(0))
+	require.Len(t, res, 0)
+
+	res, all, err = txsRepo.ProposalDepositors(context.Background(),
+		2, &model.SortBy{By: "timestamp", Direction: "desc"}, 100, 0)
+	require.NoError(t, err)
+	require.Equal(t, all, int64(1))
+	require.Len(t, res, 1)
+
+	res, all, err = txsRepo.ProposalDepositors(context.Background(),
+		2, &model.SortBy{By: "amount", Direction: "asc"}, 100, 0)
+	require.NoError(t, err)
+	require.Equal(t, all, int64(1))
+	require.Len(t, res, 1)
+}

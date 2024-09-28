@@ -45,6 +45,8 @@ type Txs interface {
 	AccountInfo(ctx context.Context, account string) (*model.AccountInfo, error)
 	DelegatesByValidator(ctx context.Context, from, to time.Time, valoperAddress string,
 		limit int64, offset int64) (data []*models.Tx, totalSum *model.Denom, all int64, err error)
+	ProposalDepositors(ctx context.Context, proposalID int,
+		sortBy *model.SortBy, limit int64, offset int64) ([]*model.ProposalDeposit, int64, error)
 }
 
 type txs struct {
@@ -195,4 +197,10 @@ func (s *txs) DelegatesByValidator(ctx context.Context, from, to time.Time, valo
 	limit int64, offset int64,
 ) (data []*models.Tx, totalSum *model.Denom, all int64, err error) {
 	return s.txRepo.DelegatesByValidator(ctx, from, to, valoperAddress, limit, offset)
+}
+
+func (s *txs) ProposalDepositors(ctx context.Context, proposalID int,
+	sortBy *model.SortBy, limit int64, offset int64,
+) ([]*model.ProposalDeposit, int64, error) {
+	return s.txRepo.ProposalDepositors(ctx, proposalID, sortBy, limit, offset)
 }
