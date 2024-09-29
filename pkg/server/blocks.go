@@ -729,8 +729,10 @@ func (r *blocksServer) ProposalDepositors(ctx context.Context,
 ) (*pb.ProposalDepositorsResponse, error) {
 	var sortBy *model.SortBy
 	if in.Sort != nil {
-		sortBy.By = in.Sort.SortBy
-		sortBy.Direction = in.Sort.Direction
+		sortBy = &model.SortBy{
+			By:        in.Sort.SortBy,
+			Direction: in.Sort.Direction,
+		}
 	}
 	res, all, err := r.srvTx.ProposalDepositors(ctx, int(in.ProposalId), sortBy, in.Limit.Limit, in.Limit.Offset)
 	if err != nil {
