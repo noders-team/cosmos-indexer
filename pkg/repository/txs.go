@@ -49,6 +49,8 @@ type Txs interface {
 	ExtractNumber(value string) (decimal.Decimal, string, error)
 	DelegatesByValidator(ctx context.Context, from, to time.Time, valoperAddress string,
 		limit int64, offset int64) (data []*models.Tx, totalSum *model.Denom, all int64, err error)
+	ProposalDepositors(ctx context.Context, proposalID int,
+		sortBy *model.SortBy, limit int64, offset int64) ([]*model.ProposalDeposit, int64, error)
 }
 
 type TxsFilter struct {
@@ -1080,6 +1082,14 @@ func (r *txs) UpdateViews(ctx context.Context) error {
 		return err
 	}
 
+	_, err = r.db.Exec(ctx, `
+		REFRESH MATERIALIZED VIEW CONCURRENTLY depositors_normalized WITH DATA;
+	`)
+	if err != nil {
+		log.Err(err).Msgf("error refreshing depositors_normalized")
+		return err
+	}
+
 	return err
 }
 
@@ -1158,4 +1168,70 @@ func (r *txs) DelegatesByValidator(ctx context.Context, from, to time.Time, valo
 	totalRes.Amount = totalDec.String()
 
 	return data, &totalRes, all, nil
+}
+
+func (r *txs) ProposalDepositors(ctx context.Context, proposalID int,
+	sortBy *model.SortBy, limit int64, offset int64,
+) ([]*model.ProposalDeposit, int64, error) {
+	dialect := goqu.Select(
+		"dp.hash",
+		"dp.timestamp",
+		"dp.sender",
+		"dp.amount",
+		"dp.denom").
+		From(goqu.T("depositors_normalized").As("dp"))
+	dialect = dialect.
+		Where(goqu.I("dp.proposal_id").Eq(fmt.Sprintf("%d", proposalID)))
+
+	if sortBy != nil && sortBy.By != "" {
+		if strings.EqualFold(sortBy.Direction, "asc") {
+			dialect = dialect.Order(goqu.I(fmt.Sprintf("dp.%s", sortBy.By)).Asc())
+		} else {
+			dialect = dialect.Order(goqu.I(fmt.Sprintf("dp.%s", sortBy.By)).Desc())
+		}
+	} else {
+		dialect = dialect.Order(goqu.I("dp.timestamp").Desc())
+	}
+	dialect = dialect.Limit(uint(limit)).Offset(uint(offset))
+
+	query, args, err := dialect.ToSQL()
+	if err != nil {
+		return nil, 0, err
+	}
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		log.Err(err).Msgf("error getting votes by accounts")
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	data := make([]*model.ProposalDeposit, 0)
+	for rows.Next() {
+		var deposit model.ProposalDeposit
+		var amount model.DecCoin
+		if err = rows.Scan(&deposit.TxHash, &deposit.TxTime, &deposit.Address, &amount.Amount, &amount.Denom); err != nil {
+			return nil, 0, err
+		}
+		deposit.Amount = amount
+
+		data = append(data, &deposit)
+	}
+
+	queryAll, args, err := dialect.
+		ClearSelect().
+		ClearLimit().
+		ClearOffset().
+		ClearOrder().
+		SelectDistinct(goqu.COUNT("dp.hash")).ToSQL()
+	if err != nil {
+		return nil, 0, err
+	}
+	row := r.db.QueryRow(ctx, queryAll, args...)
+	var all int64
+	if err = row.Scan(&all); err != nil {
+		log.Err(err).Msgf("error getting total amount")
+		return nil, 0, err
+	}
+
+	return data, all, nil
 }

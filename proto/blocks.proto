@@ -38,6 +38,7 @@ service BlocksService {
   rpc TxCountByAccounts(TxCountByAccountsRequest) returns (TxCountByAccountsResponse) {}
   rpc AccountInfo(AccountInfoRequest) returns (AccountInfoResponse) {}
   rpc DelegatesByValidator(DelegatesByValidatorRequest) returns (DelegatesByValidatorResponse) {}
+  rpc ProposalDepositors(ProposalDepositorsRequest) returns (ProposalDepositorsResponse) {}
 }
 
 
@@ -496,4 +497,22 @@ message DelegatesByValidatorResponse{
 message SortBy{
   string sort_by = 1;
   string direction = 2;
+}
+
+message ProposalDeposit {
+  string tx_hash=1;
+  google.protobuf.Timestamp time = 2;
+  Denom amount = 3;
+  string address = 4;
+}
+
+message ProposalDepositorsRequest{
+  int32 proposal_id = 1;
+  Limit limit = 2;
+  optional SortBy sort = 3;
+}
+
+message ProposalDepositorsResponse{
+  repeated ProposalDeposit data=1;
+  Result result = 2;
 }

@@ -87,3 +87,10 @@ type SortBy struct {
 	By        string
 	Direction string
 }
+
+type ProposalDeposit struct {
+	Address string
+	TxHash  string
+	TxTime  time.Time
+	Amount  DecCoin
+}

@@ -392,6 +392,19 @@ create unique index "messageAttributeIndex"
 );`
 	migrations = append(migrations, queryVotesNormalised)
 
+	queryDepositsNormalised := `create table depositors_normalized
+(	
+    id 		 	 bigint,
+    timestamp    timestamp with time zone,
+    hash         text,
+    height 		 bigint,
+    sender       text,
+    proposal_id  text,
+    amount       numeric,
+    denom        text
+);`
+	migrations = append(migrations, queryDepositsNormalised)
+
 	for _, query := range migrations {
 		_, err := postgresConn.Exec(ctx, query)
 		if err != nil {

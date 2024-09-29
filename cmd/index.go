@@ -678,7 +678,6 @@ func (idxr *Indexer) GetIndexerStartingHeight(chainID uint) int64 {
 		latestBlock, err := idxr.rpcClient.GetLatestBlockHeight()
 		if err != nil {
 			log.Err(err).Msgf("Error getting blockchain latest height. Err: %v", err)
-			log.Fatal()
 		}
 
 		fmt.Println("Found latest block", latestBlock)

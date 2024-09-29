@@ -212,6 +212,43 @@ CREATE INDEX IF NOT EXISTS idx_account_tx_hash
 		return err
 	}
 
+	queryDepositorsNormalized := `CREATE MATERIALIZED VIEW IF NOT EXISTS depositors_normalized AS
+select inn.id,
+       inn.timestamp,
+       inn.hash,
+       inn.height,
+       max(inn.sender) as sender,
+       max(inn.proposal_id) as proposal_id,
+       CAST(REGEXP_REPLACE(MAX(inn.amount_raw), '[^0-9]', '', 'g') AS DECIMAL(78,0)) AS amount,
+       REGEXP_REPLACE(MAX(inn.amount_raw), '[0-9]', '', 'g') AS denom
+        from (
+       select txes.id,
+              txes.timestamp,
+              txes.hash,
+              blocks.height,
+              case when message_event_attribute_keys.key = 'sender' then message_event_attributes.value end as sender,
+              case when message_event_attribute_keys.key = 'proposal_id' then message_event_attributes.value end as proposal_id,
+              case when message_event_attribute_keys.key = 'amount' then message_event_attributes.value end as amount_raw
+       from txes
+                left join blocks on txes.block_id = blocks.id
+                left join messages on txes.id = messages.tx_id
+                left join message_types on messages.message_type_id = message_types.id
+                left join message_events on messages.id = message_events.message_id
+                left join message_event_types on message_events.message_event_type_id=message_event_types.id
+                left join message_event_attributes on message_events.id = message_event_attributes.message_event_id
+                left join message_event_attribute_keys on message_event_attributes.message_event_attribute_key_id = message_event_attribute_keys.id
+       where message_types.message_type IN ('/cosmos.gov.v1beta1.MsgSubmitProposal')
+       order by txes.id, messages.message_index, message_events.index, message_event_attributes.index) as inn
+group by inn.id, inn.timestamp, inn.hash, inn.height;`
+	if err = db.Exec(queryDepositorsNormalized).Error; err != nil {
+		return err
+	}
+
+	queryDepositorsNormalizedIndex := `CREATE UNIQUE INDEX IF NOT EXISTS idx_depositors_normalized on depositors_normalized(id, hash);`
+	if err = db.Exec(queryDepositorsNormalizedIndex).Error; err != nil {
+		return err
+	}
+
 	return nil
 }
 

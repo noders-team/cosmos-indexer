@@ -723,3 +723,41 @@ func (r *blocksServer) DelegatesByValidator(ctx context.Context, in *pb.Delegate
 		},
 	}, nil
 }
+
+func (r *blocksServer) ProposalDepositors(ctx context.Context,
+	in *pb.ProposalDepositorsRequest,
+) (*pb.ProposalDepositorsResponse, error) {
+	var sortBy *model.SortBy
+	if in.Sort != nil {
+		sortBy = &model.SortBy{
+			By:        in.Sort.SortBy,
+			Direction: in.Sort.Direction,
+		}
+	}
+	res, all, err := r.srvTx.ProposalDepositors(ctx, int(in.ProposalId), sortBy, in.Limit.Limit, in.Limit.Offset)
+	if err != nil {
+		return &pb.ProposalDepositorsResponse{}, err
+	}
+
+	data := make([]*pb.ProposalDeposit, 0)
+	for _, tx := range res {
+		data = append(data, &pb.ProposalDeposit{
+			TxHash:  tx.TxHash,
+			Time:    timestamppb.New(tx.TxTime),
+			Address: tx.Address,
+			Amount: &pb.Denom{
+				Denom:  tx.Amount.Denom,
+				Amount: tx.Amount.Amount.String(),
+			},
+		})
+	}
+
+	return &pb.ProposalDepositorsResponse{
+		Data: data,
+		Result: &pb.Result{
+			Limit:  in.Limit.Limit,
+			Offset: in.Limit.Offset,
+			All:    all,
+		},
+	}, nil
+}

@@ -50,6 +50,7 @@ const (
 	BlocksService_TxCountByAccounts_FullMethodName         = "/blocks.BlocksService/TxCountByAccounts"
 	BlocksService_AccountInfo_FullMethodName               = "/blocks.BlocksService/AccountInfo"
 	BlocksService_DelegatesByValidator_FullMethodName      = "/blocks.BlocksService/DelegatesByValidator"
+	BlocksService_ProposalDepositors_FullMethodName        = "/blocks.BlocksService/ProposalDepositors"
 )
 
 // BlocksServiceClient is the client API for BlocksService service.
@@ -87,6 +88,7 @@ type BlocksServiceClient interface {
 	TxCountByAccounts(ctx context.Context, in *TxCountByAccountsRequest, opts ...grpc.CallOption) (*TxCountByAccountsResponse, error)
 	AccountInfo(ctx context.Context, in *AccountInfoRequest, opts ...grpc.CallOption) (*AccountInfoResponse, error)
 	DelegatesByValidator(ctx context.Context, in *DelegatesByValidatorRequest, opts ...grpc.CallOption) (*DelegatesByValidatorResponse, error)
+	ProposalDepositors(ctx context.Context, in *ProposalDepositorsRequest, opts ...grpc.CallOption) (*ProposalDepositorsResponse, error)
 }
 
 type blocksServiceClient struct {
@@ -407,6 +409,16 @@ func (c *blocksServiceClient) DelegatesByValidator(ctx context.Context, in *Dele
 	return out, nil
 }
 
+func (c *blocksServiceClient) ProposalDepositors(ctx context.Context, in *ProposalDepositorsRequest, opts ...grpc.CallOption) (*ProposalDepositorsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProposalDepositorsResponse)
+	err := c.cc.Invoke(ctx, BlocksService_ProposalDepositors_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BlocksServiceServer is the server API for BlocksService service.
 // All implementations must embed UnimplementedBlocksServiceServer
 // for forward compatibility
@@ -442,6 +454,7 @@ type BlocksServiceServer interface {
 	TxCountByAccounts(context.Context, *TxCountByAccountsRequest) (*TxCountByAccountsResponse, error)
 	AccountInfo(context.Context, *AccountInfoRequest) (*AccountInfoResponse, error)
 	DelegatesByValidator(context.Context, *DelegatesByValidatorRequest) (*DelegatesByValidatorResponse, error)
+	ProposalDepositors(context.Context, *ProposalDepositorsRequest) (*ProposalDepositorsResponse, error)
 	mustEmbedUnimplementedBlocksServiceServer()
 }
 
@@ -541,6 +554,9 @@ func (UnimplementedBlocksServiceServer) AccountInfo(context.Context, *AccountInf
 }
 func (UnimplementedBlocksServiceServer) DelegatesByValidator(context.Context, *DelegatesByValidatorRequest) (*DelegatesByValidatorResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DelegatesByValidator not implemented")
+}
+func (UnimplementedBlocksServiceServer) ProposalDepositors(context.Context, *ProposalDepositorsRequest) (*ProposalDepositorsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ProposalDepositors not implemented")
 }
 func (UnimplementedBlocksServiceServer) mustEmbedUnimplementedBlocksServiceServer() {}
 
@@ -1113,6 +1129,24 @@ func _BlocksService_DelegatesByValidator_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BlocksService_ProposalDepositors_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProposalDepositorsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlocksServiceServer).ProposalDepositors(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BlocksService_ProposalDepositors_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlocksServiceServer).ProposalDepositors(ctx, req.(*ProposalDepositorsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BlocksService_ServiceDesc is the grpc.ServiceDesc for BlocksService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1243,6 +1277,10 @@ var BlocksService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DelegatesByValidator",
 			Handler:    _BlocksService_DelegatesByValidator_Handler,
+		},
+		{
+			MethodName: "ProposalDepositors",
+			Handler:    _BlocksService_ProposalDepositors_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
