@@ -43,6 +43,7 @@ import (
 	"github.com/noders-team/cosmos-indexer/probe"
 	"github.com/spf13/cobra"
 
+	probeClient "github.com/nodersteam/probe/client"
 	migrate "github.com/xakep666/mongo-migrate"
 	"gorm.io/gorm"
 )
@@ -416,7 +417,8 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 			dbChainID,
 			indexer.blockEventFilterRegistries,
 			chBlocks,
-			nil)
+			nil,
+			&indexer.cl.Codec)
 	} else {
 		go idxr.processBlocks(
 			&wg,
@@ -427,7 +429,8 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 			dbChainID,
 			indexer.blockEventFilterRegistries,
 			chBlocks,
-			cache)
+			cache,
+			&indexer.cl.Codec)
 	}
 
 	wg.Add(1)
@@ -722,6 +725,7 @@ func (idxr *Indexer) processBlocks(wg *sync.WaitGroup,
 	blockEventFilterRegistry blockEventFilterRegistries,
 	blocksCh chan *model.BlockInfo,
 	cache *repository.Cache,
+	_ *probeClient.Codec,
 ) {
 	defer close(blockEventsDataChan)
 	defer close(txDataChan)

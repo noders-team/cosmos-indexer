@@ -11,7 +11,7 @@ import (
 type IndexConfig struct {
 	Database           Database
 	ConfigFileLocation string
-	Base               indexBase
+	Base               IndexBase
 	Log                log
 	Probe              Probe
 	Flags              flags
@@ -20,9 +20,9 @@ type IndexConfig struct {
 	MongoConf          MongoConf
 }
 
-type indexBase struct {
+type IndexBase struct {
 	throttlingBase
-	retryBase
+	RetryBase
 	ReindexMessageType         string `mapstructure:"reindex-message-type"`
 	ReattemptFailedBlocks      bool   `mapstructure:"reattempt-failed-blocks"`
 	GenesisIndex               bool   `mapstructure:"genesis-index"`
@@ -127,7 +127,7 @@ func CheckSuperfluousIndexKeys(keys []string) []string {
 	addProbeConfigKeys(validKeys)
 
 	// add base keys
-	for _, key := range getValidConfigKeys(indexBase{}, "base") {
+	for _, key := range getValidConfigKeys(IndexBase{}, "base") {
 		validKeys[key] = struct{}{}
 	}
 
@@ -135,7 +135,7 @@ func CheckSuperfluousIndexKeys(keys []string) []string {
 		validKeys[key] = struct{}{}
 	}
 
-	for _, key := range getValidConfigKeys(retryBase{}, "base") {
+	for _, key := range getValidConfigKeys(RetryBase{}, "base") {
 		validKeys[key] = struct{}{}
 	}
 
