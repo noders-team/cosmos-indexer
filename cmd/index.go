@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -46,6 +47,11 @@ import (
 	probeClient "github.com/nodersteam/probe/client"
 	migrate "github.com/xakep666/mongo-migrate"
 	"gorm.io/gorm"
+)
+
+const (
+	modeFetcher = "fetcher"
+	modeStorage = "storage"
 )
 
 type Indexer struct {
@@ -240,7 +246,147 @@ func index(_ *cobra.Command, _ []string) {
 	ctx := context.Background()
 	defer ctx.Done()
 
-	runIndexer(ctx, idxr, true, idxr.cfg.Base.StartBlock, idxr.cfg.Base.EndBlock)
+	switch idxr.cfg.Base.Mode {
+	case modeFetcher:
+		if idxr.cfg.Base.ModeTopic == "" {
+			idxr.cfg.Base.ModeTopic = "indexer"
+		}
+		if idxr.cfg.Base.EndBlock < idxr.cfg.Base.StartBlock {
+			panic("end-block must be higher then start-block for fetcher mode")
+		}
+		if idxr.cfg.Base.GenesisBlocksStep == 0 {
+			idxr.cfg.Base.GenesisBlocksStep = 5000
+		}
+
+		runIndexerAsFetcher(ctx, idxr, idxr.cfg.Base.StartBlock, idxr.cfg.Base.EndBlock)
+	default:
+		if idxr.cfg.Base.ModeTopic == "" {
+			idxr.cfg.Base.ModeTopic = "indexer"
+		}
+		runIndexer(ctx, idxr, true, idxr.cfg.Base.StartBlock, idxr.cfg.Base.EndBlock)
+	}
+}
+
+func runIndexerAsFetcher(ctx context.Context, idxr *Indexer, startBlock, endBlock int64) {
+	// blockChans are just the block heights; limit max jobs in the queue, otherwise this queue would contain one
+	// item (block height) for every block on the entire blockchain we're indexing. Furthermore, once the queue
+	// is close to empty, we will spin up a new thread to fill it up with new jobs.
+	blockEnqueueChan := make(chan *core.EnqueueData, 10000)
+
+	// This channel represents query job results for the RPC queries to Cosmos Nodes. Every time an RPC query
+	// completes, the query result will be sent to this channel (for later processing by a different thread).
+	// Realistically, I expect that RPC queries will be slower than our relational DB on the local network.
+	// If RPC queries are faster than DB inserts this buffer will fill up.
+	// We will periodically check the buffer size to monitor performance so we can optimize later.
+	rpcQueryThreads := int(idxr.cfg.Base.RPCWorkers)
+	if rpcQueryThreads == 0 {
+		rpcQueryThreads = 64
+	}
+
+	chain := models.Chain{
+		ChainID: idxr.cfg.Probe.ChainID,
+		Name:    idxr.cfg.Probe.ChainName,
+	}
+
+	dbChainID, err := dbTypes.GetDBChainID(idxr.db, chain)
+	if err != nil {
+		config.Log.Fatal("Failed to add/create chain in DB", err)
+	}
+
+	// This block consolidates all base RPC requests into one worker.
+	// Workers read from the enqueued blocks and query blockchain data from the RPC server.
+	var blockRPCWaitGroup sync.WaitGroup
+	blockRPCWorkerDataChan := make(chan core.IndexerBlockEventData, 10000)
+
+	worker := core.NewBlockRPCWorker(
+		idxr.cfg.Probe.ChainID,
+		idxr.cfg,
+		idxr.cl,
+		idxr.db,
+		idxr.rpcClient,
+	)
+
+	ignoreExisting := false
+	if idxr.cfg.Base.GenesisIndex {
+		ignoreExisting = true
+	}
+	for i := 0; i < rpcQueryThreads; i++ {
+		blockRPCWaitGroup.Add(1)
+		go worker.Worker(&blockRPCWaitGroup, blockEnqueueChan, blockRPCWorkerDataChan, ignoreExisting)
+	}
+
+	go func() {
+		blockRPCWaitGroup.Wait()
+		close(blockRPCWorkerDataChan)
+	}()
+
+	// setup cache
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     idxr.cfg.RedisConf.RedisAddr,
+		Password: idxr.cfg.RedisConf.RedisPsw,
+		DB:       0, // use default DB
+	})
+
+	go func(ctx context.Context) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case newBlock := <-blockRPCWorkerDataChan:
+				bl, err := newBlock.MarshalJSON(&idxr.cl.Codec)
+				if err != nil {
+					log.Err(err).Msgf("💩error marshalling block")
+					continue
+				}
+
+				encoded := base64.StdEncoding.EncodeToString(bl)
+				err = rdb.Publish(ctx, idxr.cfg.Base.ModeTopic, encoded).Err()
+				if err != nil {
+					log.Err(err).Msgf("💩error publishing block")
+					continue
+				}
+				log.Info().Msgf("🤌block %d published successfully", newBlock.BlockData.Block.Height)
+			}
+		}
+	}(ctx)
+
+	ctxPing, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err = rdb.Ping(ctxPing).Err(); err != nil {
+		panic(err)
+	}
+
+	log.Info().Msgf("running indexer as fetcher mode.")
+	steps := idxr.cfg.Base.GenesisBlocksStep
+
+	numGoroutines, blocks := calculateGoroutines(startBlock, endBlock, steps)
+	counter := int64(0)
+	log.Info().Msgf("num go routines for genesis indexing %d", numGoroutines)
+	for i := int64(0); i < numGoroutines; i++ {
+		blocksToProceed := blocks[i]
+		endBlockInternal := counter + blocksToProceed
+
+		log.Info().Msgf("🚀starting indexer for blocks %d - %d", counter, endBlockInternal)
+
+		blockEnqueueFunction, err := core.GenerateDefaultEnqueueFunction(idxr.db, *idxr.cfg, dbChainID,
+			idxr.rpcClient, counter, endBlockInternal)
+		if err != nil {
+			config.Log.Fatal("Failed to generate block enqueue function", err)
+		}
+		go func() {
+			err = blockEnqueueFunction(blockEnqueueChan)
+			if err != nil {
+				config.Log.Fatal("Block enqueue failed", err)
+			}
+		}()
+
+		counter += blocksToProceed
+	}
+
+	<-ctx.Done() // TODO find better place
+
+	close(blockEnqueueChan)
+	log.Info().Msgf("closing.")
 }
 
 func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, endBlock int64) {
@@ -406,12 +552,88 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 		}(ctx)
 	}
 
+	// pipe between fetcher and reader
+	pipe := make(chan core.IndexerBlockEventData, 10000)
+	go func(ctx context.Context, rdb *redis.Client) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case newBlock := <-blockRPCWorkerDataChan:
+				bl, err := newBlock.MarshalJSON(&idxr.cl.Codec)
+				if err != nil {
+					log.Err(err).Msgf("💩error marshalling block")
+					continue
+				}
+				encoded := base64.StdEncoding.EncodeToString(bl)
+
+				err = rdb.Publish(ctx, idxr.cfg.Base.ModeTopic, encoded).Err()
+				if err != nil {
+					log.Err(err).Msgf("💩error publishing block")
+					continue
+				}
+				log.Info().Msgf("🤌block %d published successfully", newBlock.BlockData.Block.Height)
+			}
+		}
+	}(ctx, rdb)
+
+	go func(ctx context.Context, rdb *redis.Client, topic string) {
+		subscriber := rdb.Subscribe(ctx, topic)
+		defer func() {
+			err := subscriber.Unsubscribe(ctx, topic)
+			if err != nil {
+				log.Error().Err(err).Msg("unsubscribe pubsub")
+			}
+			err = subscriber.Close()
+			if err != nil {
+				log.Error().Err(err).Msg("close pubsub")
+			}
+		}()
+
+		innerReceiver := make(chan core.IndexerBlockEventData)
+		defer close(innerReceiver)
+
+		go func(inner chan core.IndexerBlockEventData) {
+			for {
+				msg, err := subscriber.ReceiveMessage(ctx)
+				if err != nil {
+					log.Err(err).Msgf("error in subscriber.ReceiveMessage")
+					continue
+				}
+
+				b, err := base64.StdEncoding.DecodeString(msg.Payload)
+				if err != nil {
+					log.Err(err).Msgf("error decoding")
+					continue
+				}
+				var in core.IndexerBlockEventData
+				err = in.UnmarshalJSON(b)
+				if err != nil {
+					log.Error().Msgf("error unmarshalling block")
+					continue
+				}
+
+				inner <- in
+			}
+		}(innerReceiver)
+
+		for {
+			select {
+			case <-ctx.Done():
+				log.Debug().Msgf("breaking the worker loop.")
+				return
+			case newRecord := <-innerReceiver:
+				pipe <- newRecord
+			}
+		}
+	}(ctx, rdb, idxr.cfg.Base.ModeTopic)
+
 	wg.Add(1)
 	if idxr.cfg.Base.GenesisIndex {
 		go idxr.processBlocks(
 			&wg,
 			core.HandleFailedBlock,
-			blockRPCWorkerDataChan,
+			pipe,
 			blockEventsDataChan,
 			txDataChan,
 			dbChainID,
@@ -423,7 +645,7 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 		go idxr.processBlocks(
 			&wg,
 			core.HandleFailedBlock,
-			blockRPCWorkerDataChan,
+			pipe,
 			blockEventsDataChan,
 			txDataChan,
 			dbChainID,

@@ -23,6 +23,8 @@ type IndexConfig struct {
 type IndexBase struct {
 	throttlingBase
 	RetryBase
+	Mode                       string `mapstructure:"mode"`
+	ModeTopic                  string `mapstructure:"mode-storage-topic"`
 	ReindexMessageType         string `mapstructure:"reindex-message-type"`
 	ReattemptFailedBlocks      bool   `mapstructure:"reattempt-failed-blocks"`
 	GenesisIndex               bool   `mapstructure:"genesis-index"`
@@ -73,6 +75,9 @@ func SetupIndexSpecificFlags(conf *IndexConfig, cmd *cobra.Command) {
 
 	// flags
 	cmd.PersistentFlags().BoolVar(&conf.Flags.IndexTxMessageRaw, "flags.index-tx-message-raw", false, "if true, this will index the raw message bytes. This will significantly increase the size of the database.")
+	// run-mode
+	cmd.PersistentFlags().StringVar(&conf.Base.Mode, "base.mode", "normal", "running mode, can be normal(default), fetcher or storage")
+	cmd.PersistentFlags().StringVar(&conf.Base.ModeTopic, "base.mode-topic", "", "topic for fetcher and storage modes")
 }
 
 func (conf *IndexConfig) Validate() error {
