@@ -113,7 +113,7 @@ jobs:
               --restart unless-stopped \
               --network indexer_network \
               ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }} \
-              /bin/sh -c "/bin/cosmos-indexer index \
+              /bin/sh -c "/app/cosmos-indexer index \
                 --log.pretty=true \
                 --log.level=info \
                 --base.start-block=${{ vars.BASE_START_BLOCK }} \
