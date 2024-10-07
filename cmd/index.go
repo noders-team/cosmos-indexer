@@ -360,7 +360,7 @@ func runIndexerAsFetcher(ctx context.Context, idxr *Indexer, startBlock, endBloc
 	steps := idxr.cfg.Base.GenesisBlocksStep
 
 	numGoroutines, blocks := calculateGoroutines(startBlock, endBlock, steps)
-	counter := int64(0)
+	counter := startBlock
 	log.Info().Msgf("num go routines for genesis indexing %d", numGoroutines)
 	for i := int64(0); i < numGoroutines; i++ {
 		blocksToProceed := blocks[i]
