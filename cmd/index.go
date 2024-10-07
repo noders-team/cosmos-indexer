@@ -393,7 +393,7 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 	// blockChans are just the block heights; limit max jobs in the queue, otherwise this queue would contain one
 	// item (block height) for every block on the entire blockchain we're indexing. Furthermore, once the queue
 	// is close to empty, we will spin up a new thread to fill it up with new jobs.
-	blockEnqueueChan := make(chan *core.EnqueueData, 10000)
+	blockEnqueueChan := make(chan *core.EnqueueData, 100000)
 
 	// This channel represents query job results for the RPC queries to Cosmos Nodes. Every time an RPC query
 	// completes, the query result will be sent to this channel (for later processing by a different thread).
@@ -420,7 +420,7 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 	// This block consolidates all base RPC requests into one worker.
 	// Workers read from the enqueued blocks and query blockchain data from the RPC server.
 	var blockRPCWaitGroup sync.WaitGroup
-	blockRPCWorkerDataChan := make(chan core.IndexerBlockEventData, 10000)
+	blockRPCWorkerDataChan := make(chan core.IndexerBlockEventData, 100000)
 
 	worker := core.NewBlockRPCWorker(
 		idxr.cfg.Probe.ChainID,
@@ -553,7 +553,7 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 	}
 
 	// pipe between fetcher and reader
-	pipe := make(chan core.IndexerBlockEventData, 10000)
+	pipe := make(chan core.IndexerBlockEventData)
 	go func(ctx context.Context, rdb *redis.Client) {
 		for {
 			select {
