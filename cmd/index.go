@@ -613,6 +613,8 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 					continue
 				}
 
+				log.Debug().Msgf("💩  ==> received block for writing block %d.", in.BlockData.Block.Height)
+
 				inner <- in
 			}
 		}(innerReceiver)
