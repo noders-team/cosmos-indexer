@@ -64,13 +64,14 @@ func MigrateModels(db *gorm.DB) error {
 		return err
 	}
 
-	if err := migrateIndexes(db); err != nil {
-		return err
-	}
+	// TODO return it back
+	//if err := migrateIndexes(db); err != nil {
+	//	return err
+	//}
 
-	if err := migrateTables(db); err != nil {
-		return err
-	}
+	//if err := migrateTables(db); err != nil {
+	//	return err
+	//}
 
 	return nil
 }
