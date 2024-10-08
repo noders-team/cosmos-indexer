@@ -361,7 +361,7 @@ func runIndexerAsFetcher(ctx context.Context, idxr *Indexer, startBlock, endBloc
 
 	numGoroutines, blocks := calculateGoroutines(startBlock, endBlock, steps)
 	counter := startBlock
-	log.Info().Msgf("num go routines for genesis indexing %d", numGoroutines)
+	log.Info().Msgf("num go routines for indexing %d", numGoroutines)
 	for i := int64(0); i < numGoroutines; i++ {
 		blocksToProceed := blocks[i]
 		endBlockInternal := counter + blocksToProceed
@@ -420,7 +420,7 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 	// This block consolidates all base RPC requests into one worker.
 	// Workers read from the enqueued blocks and query blockchain data from the RPC server.
 	var blockRPCWaitGroup sync.WaitGroup
-	blockRPCWorkerDataChan := make(chan core.IndexerBlockEventData, 100000)
+	blockRPCWorkerDataChan := make(chan core.IndexerBlockEventData)
 
 	worker := core.NewBlockRPCWorker(
 		idxr.cfg.Probe.ChainID,
@@ -554,81 +554,7 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 
 	// pipe between fetcher and reader
 	pipe := make(chan core.IndexerBlockEventData)
-	go func(ctx context.Context, rdb *redis.Client) {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case newBlock := <-blockRPCWorkerDataChan:
-				bl, err := newBlock.MarshalJSON(&idxr.cl.Codec)
-				if err != nil {
-					log.Err(err).Msgf("💩error marshalling block")
-					continue
-				}
-				encoded := base64.StdEncoding.EncodeToString(bl)
-
-				err = rdb.Publish(ctx, idxr.cfg.Base.ModeTopic, encoded).Err()
-				if err != nil {
-					log.Err(err).Msgf("💩error publishing block")
-					continue
-				}
-				log.Info().Msgf("🤌block %d published successfully", newBlock.BlockData.Block.Height)
-			}
-		}
-	}(ctx, rdb)
-
-	go func(ctx context.Context, rdb *redis.Client, topic string) {
-		subscriber := rdb.Subscribe(ctx, topic)
-		defer func() {
-			err := subscriber.Unsubscribe(ctx, topic)
-			if err != nil {
-				log.Error().Err(err).Msg("unsubscribe pubsub")
-			}
-			err = subscriber.Close()
-			if err != nil {
-				log.Error().Err(err).Msg("close pubsub")
-			}
-		}()
-
-		innerReceiver := make(chan core.IndexerBlockEventData)
-		defer close(innerReceiver)
-
-		go func(inner chan core.IndexerBlockEventData) {
-			for {
-				msg, err := subscriber.ReceiveMessage(ctx)
-				if err != nil {
-					log.Err(err).Msgf("error in subscriber.ReceiveMessage")
-					continue
-				}
-
-				b, err := base64.StdEncoding.DecodeString(msg.Payload)
-				if err != nil {
-					log.Err(err).Msgf("error decoding")
-					continue
-				}
-				var in core.IndexerBlockEventData
-				err = in.UnmarshalJSON(b)
-				if err != nil {
-					log.Error().Msgf("error unmarshalling block")
-					continue
-				}
-
-				log.Info().Msgf("💩  ==> received block for writing block %d.", in.BlockData.Block.Height)
-
-				inner <- in
-			}
-		}(innerReceiver)
-
-		for {
-			select {
-			case <-ctx.Done():
-				log.Debug().Msgf("breaking the worker loop.")
-				return
-			case newRecord := <-innerReceiver:
-				pipe <- newRecord
-			}
-		}
-	}(ctx, rdb, idxr.cfg.Base.ModeTopic)
+	go runPipe(ctx, idxr, rdb, idxr.cfg.Base.ModeTopic, pipe, blockRPCWorkerDataChan)
 
 	wg.Add(1)
 	if idxr.cfg.Base.GenesisIndex {
@@ -752,6 +678,83 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 	close(blockEnqueueChan)
 
 	wg.Wait()
+}
+
+func runPipe(ctx context.Context, idxr *Indexer, rdb *redis.Client, topic string,
+	pipe chan core.IndexerBlockEventData, blockRPCWorkerDataChan chan core.IndexerBlockEventData) {
+	go func(ctx context.Context, rdb *redis.Client) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case newBlock := <-blockRPCWorkerDataChan:
+				bl, err := newBlock.MarshalJSON(&idxr.cl.Codec)
+				if err != nil {
+					log.Err(err).Msgf("💩error marshalling block")
+					continue
+				}
+				encoded := base64.StdEncoding.EncodeToString(bl)
+
+				err = rdb.Publish(ctx, idxr.cfg.Base.ModeTopic, encoded).Err()
+				if err != nil {
+					log.Err(err).Msgf("💩error publishing block")
+					continue
+				}
+				log.Info().Msgf("🤌block %d published successfully", newBlock.BlockData.Block.Height)
+			}
+		}
+	}(ctx, rdb)
+
+	subscriber := rdb.Subscribe(ctx, topic)
+	defer func() {
+		err := subscriber.Unsubscribe(ctx, topic)
+		if err != nil {
+			log.Error().Err(err).Msg("unsubscribe pubsub")
+		}
+		err = subscriber.Close()
+		if err != nil {
+			log.Error().Err(err).Msg("close pubsub")
+		}
+	}()
+
+	innerReceiver := make(chan core.IndexerBlockEventData)
+	defer close(innerReceiver)
+
+	go func(inner chan core.IndexerBlockEventData) {
+		for {
+			msg, err := subscriber.ReceiveMessage(ctx)
+			if err != nil {
+				log.Err(err).Msgf("error in subscriber.ReceiveMessage")
+				continue
+			}
+
+			b, err := base64.StdEncoding.DecodeString(msg.Payload)
+			if err != nil {
+				log.Err(err).Msgf("error decoding")
+				continue
+			}
+			var in core.IndexerBlockEventData
+			err = in.UnmarshalJSON(b)
+			if err != nil {
+				log.Error().Msgf("error unmarshalling block")
+				continue
+			}
+
+			log.Info().Msgf("💩  ==> received block for writing block %d.", in.BlockData.Block.Height)
+
+			inner <- in
+		}
+	}(innerReceiver)
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Debug().Msgf("breaking the worker loop.")
+			return
+		case newRecord := <-innerReceiver:
+			pipe <- newRecord
+		}
+	}
 }
 
 func mongoDBMigrate(ctx context.Context,
