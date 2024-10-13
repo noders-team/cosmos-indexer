@@ -478,15 +478,18 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 		for ind := range signaturesCopy {
 			signaturesCopy[ind].BlockID = uint64(block.ID)
 		}
+
 		if len(signaturesCopy) > 0 {
-			err := dbTransaction.Clauses(
-				clause.OnConflict{
-					Columns:   []clause.Column{{Name: "block_id"}, {Name: "validator_address"}},
-					UpdateAll: true,
-				}).Create(signaturesCopy).Error
-			if err != nil {
-				config.Log.Error("Error creating block signatures in events.", err)
-				return err
+			for _, signature := range signaturesCopy {
+				err := dbTransaction.Clauses(
+					clause.OnConflict{
+						Columns:   []clause.Column{{Name: "block_id"}, {Name: "validator_address"}},
+						UpdateAll: true,
+					}).FirstOrCreate(&signature).Error
+				if err != nil {
+					config.Log.Error("Error creating block signatures in events.", err)
+					return err
+				}
 			}
 		}
 		block.Signatures = signaturesCopy
@@ -532,17 +535,17 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 		}
 
 		if len(addressesSlice) != 0 {
-			if err := dbTransaction.Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "address"}},
-				DoUpdates: clause.AssignmentColumns([]string{"address"}),
-			}).Create(addressesSlice).Error; err != nil {
-				config.Log.Error("Error getting/creating addresses.", err)
-				return err
+			for _, address := range addressesSlice {
+				err := dbTransaction.Clauses(clause.OnConflict{
+					Columns:   []clause.Column{{Name: "address"}},
+					DoUpdates: clause.AssignmentColumns([]string{"address"}),
+				}).FirstOrCreate(&address).Error
+				if err != nil {
+					config.Log.Error("Error getting/creating addresses.", err)
+					return err
+				}
+				uniqueAddress[address.Address] = address
 			}
-		}
-
-		for _, address := range addressesSlice {
-			uniqueAddress[address.Address] = address
 		}
 
 		var txesSlice []models.Tx
@@ -635,11 +638,14 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 
 		if len(txesSlice) != 0 {
 			config.Log.Infof("TxesSlice size %d for block %d", len(txesSlice), block.Height)
-			if err := dbTransaction.Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "hash"}},
-				DoUpdates: clause.AssignmentColumns([]string{"code", "block_id"}),
-			}).Create(txesSlice).Error; err != nil {
-				config.Log.Warn("Error getting/creating txes.", err)
+			for _, tx := range txesSlice {
+				err := dbTransaction.Clauses(clause.OnConflict{
+					Columns:   []clause.Column{{Name: "hash"}},
+					DoUpdates: clause.AssignmentColumns([]string{"code", "block_id"}),
+				}).FirstOrCreate(&tx).Error
+				if err != nil {
+					config.Log.Warn("Error getting/creating txes.", err)
+				}
 			}
 		}
 
@@ -693,12 +699,14 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 			}
 
 			if len(messagesSlice) != 0 {
-				if err := dbTransaction.Clauses(clause.OnConflict{
-					Columns:   []clause.Column{{Name: "tx_id"}, {Name: "message_index"}},
-					DoUpdates: clause.AssignmentColumns([]string{"message_type_id", "message_bytes"}),
-				}).Create(messagesSlice).Error; err != nil {
-					config.Log.Error("Error getting/creating messages.", err)
-					return err
+				for _, message := range messagesSlice {
+					if err := dbTransaction.Clauses(clause.OnConflict{
+						Columns:   []clause.Column{{Name: "tx_id"}, {Name: "message_index"}},
+						DoUpdates: clause.AssignmentColumns([]string{"message_type_id", "message_bytes"}),
+					}).FirstOrCreate(message).Error; err != nil {
+						config.Log.Error("Error getting/creating messages.", err)
+						return err
+					}
 				}
 			}
 
@@ -713,12 +721,14 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 			}
 
 			if len(messagesEventsSlice) != 0 {
-				if err := dbTransaction.Clauses(clause.OnConflict{
-					Columns:   []clause.Column{{Name: "message_id"}, {Name: "index"}},
-					DoUpdates: clause.AssignmentColumns([]string{"message_event_type_id"}),
-				}).Create(messagesEventsSlice).Error; err != nil {
-					config.Log.Error("Error getting/creating message events.", err)
-					return err
+				for _, messageEvent := range messagesEventsSlice {
+					if err := dbTransaction.Clauses(clause.OnConflict{
+						Columns:   []clause.Column{{Name: "message_id"}, {Name: "index"}},
+						DoUpdates: clause.AssignmentColumns([]string{"message_event_type_id"}),
+					}).FirstOrCreate(messageEvent).Error; err != nil {
+						config.Log.Error("Error getting/creating message events.", err)
+						return err
+					}
 				}
 			}
 
@@ -735,12 +745,14 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 			}
 
 			if len(messagesEventsAttributesSlice) != 0 {
-				if err := dbTransaction.Clauses(clause.OnConflict{
-					Columns:   []clause.Column{{Name: "message_event_id"}, {Name: "index"}},
-					DoUpdates: clause.AssignmentColumns([]string{"value", "message_event_attribute_key_id"}),
-				}).Create(messagesEventsAttributesSlice).Error; err != nil {
-					config.Log.Error("Error getting/creating message event attributes.", err)
-					return err
+				for _, messageEventAttribute := range messagesEventsAttributesSlice {
+					if err := dbTransaction.Clauses(clause.OnConflict{
+						Columns:   []clause.Column{{Name: "message_event_id"}, {Name: "index"}},
+						DoUpdates: clause.AssignmentColumns([]string{"value", "message_event_attribute_key_id"}),
+					}).FirstOrCreate(messageEventAttribute).Error; err != nil {
+						config.Log.Error("Error getting/creating message event attributes.", err)
+						return err
+					}
 				}
 			}
 		}
@@ -766,17 +778,16 @@ func indexMessageTypes(db *gorm.DB, txs []TxDBWrapper) (map[string]models.Messag
 	}
 
 	if len(messageTypesSlice) != 0 {
-		if err := db.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "message_type"}},
-			DoUpdates: clause.AssignmentColumns([]string{"message_type"}),
-		}).Create(messageTypesSlice).Error; err != nil {
-			config.Log.Error("Error getting/creating message types.", err)
-			return nil, err
+		for _, messageType := range messageTypesSlice {
+			if err := db.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "message_type"}},
+				DoUpdates: clause.AssignmentColumns([]string{"message_type"}),
+			}).FirstOrCreate(&messageType).Error; err != nil {
+				config.Log.Error("Error getting/creating message types.", err)
+				return nil, err
+			}
+			fullUniqueBlockMessageTypes[messageType.MessageType] = messageType
 		}
-	}
-
-	for _, messageType := range messageTypesSlice {
-		fullUniqueBlockMessageTypes[messageType.MessageType] = messageType
 	}
 
 	return fullUniqueBlockMessageTypes, nil
@@ -797,17 +808,16 @@ func indexMessageEventTypes(db *gorm.DB, txs []TxDBWrapper) (map[string]models.M
 	}
 
 	if len(messageTypesSlice) != 0 {
-		if err := db.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "type"}},
-			DoUpdates: clause.AssignmentColumns([]string{"type"}),
-		}).Create(messageTypesSlice).Error; err != nil {
-			config.Log.Error("Error getting/creating message event types.", err)
-			return nil, err
+		for _, messageType := range messageTypesSlice {
+			if err := db.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "type"}},
+				DoUpdates: clause.AssignmentColumns([]string{"type"}),
+			}).FirstOrCreate(&messageType).Error; err != nil {
+				config.Log.Error("Error getting/creating message event types.", err)
+				return nil, err
+			}
+			fullUniqueBlockMessageEventTypes[messageType.Type] = messageType
 		}
-	}
-
-	for _, messageType := range messageTypesSlice {
-		fullUniqueBlockMessageEventTypes[messageType.Type] = messageType
 	}
 
 	return fullUniqueBlockMessageEventTypes, nil
@@ -828,17 +838,16 @@ func indexMessageEventAttributeKeys(db *gorm.DB, txs []TxDBWrapper) (map[string]
 	}
 
 	if len(messageEventAttributeKeysSlice) != 0 {
-		if err := db.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "key"}},
-			DoUpdates: clause.AssignmentColumns([]string{"key"}),
-		}).Create(messageEventAttributeKeysSlice).Error; err != nil {
-			config.Log.Error("Error getting/creating message event attribute keys.", err)
-			return nil, err
+		for _, messageEventAttributeKey := range messageEventAttributeKeysSlice {
+			if err := db.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "key"}},
+				DoUpdates: clause.AssignmentColumns([]string{"key"}),
+			}).FirstOrCreate(&messageEventAttributeKey).Error; err != nil {
+				config.Log.Error("Error getting/creating message event attribute keys.", err)
+				return nil, err
+			}
+			fullUniqueMessageEventAttributeKeys[messageEventAttributeKey.Key] = messageEventAttributeKey
 		}
-	}
-
-	for _, messageEventAttributeKey := range messageEventAttributeKeysSlice {
-		fullUniqueMessageEventAttributeKeys[messageEventAttributeKey.Key] = messageEventAttributeKey
 	}
 
 	return fullUniqueMessageEventAttributeKeys, nil
