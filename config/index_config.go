@@ -23,24 +23,24 @@ type IndexConfig struct {
 type IndexBase struct {
 	throttlingBase
 	RetryBase
-	Mode                       string `mapstructure:"mode"`
-	ModeTopic                  string `mapstructure:"mode-storage-topic"`
-	ReindexMessageType         string `mapstructure:"reindex-message-type"`
-	ReattemptFailedBlocks      bool   `mapstructure:"reattempt-failed-blocks"`
-	GenesisIndex               bool   `mapstructure:"genesis-index"`
-	GenesisBlocksStep          int64  `mapstructure:"genesis-blocks-step"`
-	StartBlock                 int64  `mapstructure:"start-block"`
-	EndBlock                   int64  `mapstructure:"end-block"`
-	BlockInputFile             string `mapstructure:"block-input-file"`
-	ReIndex                    bool   `mapstructure:"reindex"`
-	RPCWorkers                 int64  `mapstructure:"rpc-workers"`
-	BlockTimer                 int64  `mapstructure:"block-timer"`
-	WaitForChain               bool   `mapstructure:"wait-for-chain"`
-	WaitForChainDelay          int64  `mapstructure:"wait-for-chain-delay"`
-	TransactionIndexingEnabled bool   `mapstructure:"index-transactions"`
-	ExitWhenCaughtUp           bool   `mapstructure:"exit-when-caught-up"`
-	BlockEventIndexingEnabled  bool   `mapstructure:"index-block-events"`
-	FilterFile                 string `mapstructure:"filter-file"`
+	Mode                       string    `mapstructure:"mode"`
+	ModeTopics                 *[]string `mapstructure:"mode-storage-topics"`
+	ReindexMessageType         string    `mapstructure:"reindex-message-type"`
+	ReattemptFailedBlocks      bool      `mapstructure:"reattempt-failed-blocks"`
+	GenesisIndex               bool      `mapstructure:"genesis-index"`
+	GenesisBlocksStep          int64     `mapstructure:"genesis-blocks-step"`
+	StartBlock                 int64     `mapstructure:"start-block"`
+	EndBlock                   int64     `mapstructure:"end-block"`
+	BlockInputFile             string    `mapstructure:"block-input-file"`
+	ReIndex                    bool      `mapstructure:"reindex"`
+	RPCWorkers                 int64     `mapstructure:"rpc-workers"`
+	BlockTimer                 int64     `mapstructure:"block-timer"`
+	WaitForChain               bool      `mapstructure:"wait-for-chain"`
+	WaitForChainDelay          int64     `mapstructure:"wait-for-chain-delay"`
+	TransactionIndexingEnabled bool      `mapstructure:"index-transactions"`
+	ExitWhenCaughtUp           bool      `mapstructure:"exit-when-caught-up"`
+	BlockEventIndexingEnabled  bool      `mapstructure:"index-block-events"`
+	FilterFile                 string    `mapstructure:"filter-file"`
 }
 
 // Flags for specific, deeper indexing behavior
@@ -77,7 +77,8 @@ func SetupIndexSpecificFlags(conf *IndexConfig, cmd *cobra.Command) {
 	cmd.PersistentFlags().BoolVar(&conf.Flags.IndexTxMessageRaw, "flags.index-tx-message-raw", false, "if true, this will index the raw message bytes. This will significantly increase the size of the database.")
 	// run-mode
 	cmd.PersistentFlags().StringVar(&conf.Base.Mode, "base.mode", "normal", "running mode, can be normal(default), fetcher or storage")
-	cmd.PersistentFlags().StringVar(&conf.Base.ModeTopic, "base.mode-topic", "", "topic for fetcher and storage modes")
+	conf.Base.ModeTopics = cmd.PersistentFlags().StringArray("base.mode-topics", []string{""}, "topic for fetcher and storage modes")
+	cmd.PersistentFlags().StringVar(&conf.ConfigFileLocation, "config-file", "", "config file location")
 }
 
 func (conf *IndexConfig) Validate() error {

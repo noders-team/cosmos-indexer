@@ -248,8 +248,9 @@ func index(_ *cobra.Command, _ []string) {
 
 	switch idxr.cfg.Base.Mode {
 	case modeFetcher:
-		if idxr.cfg.Base.ModeTopic == "" {
-			idxr.cfg.Base.ModeTopic = "indexer"
+		if idxr.cfg.Base.ModeTopics == nil {
+			defaultTopics := []string{"indexer"}
+			idxr.cfg.Base.ModeTopics = &defaultTopics
 		}
 		if idxr.cfg.Base.EndBlock < idxr.cfg.Base.StartBlock {
 			panic("end-block must be higher then start-block for fetcher mode")
@@ -260,8 +261,9 @@ func index(_ *cobra.Command, _ []string) {
 
 		runIndexerAsFetcher(ctx, idxr, idxr.cfg.Base.StartBlock, idxr.cfg.Base.EndBlock)
 	default:
-		if idxr.cfg.Base.ModeTopic == "" {
-			idxr.cfg.Base.ModeTopic = "indexer"
+		if idxr.cfg.Base.ModeTopics == nil {
+			defaultTopics := []string{"indexer"}
+			idxr.cfg.Base.ModeTopics = &defaultTopics
 		}
 		runIndexer(ctx, idxr, true, idxr.cfg.Base.StartBlock, idxr.cfg.Base.EndBlock)
 	}
@@ -340,7 +342,7 @@ func runIndexerAsFetcher(ctx context.Context, idxr *Indexer, startBlock, endBloc
 				}
 
 				encoded := base64.StdEncoding.EncodeToString(bl)
-				err = rdb.Publish(ctx, idxr.cfg.Base.ModeTopic, encoded).Err()
+				err = rdb.Publish(ctx, roundRobinTopic(idxr), encoded).Err()
 				if err != nil {
 					log.Err(err).Msgf("💩error publishing block")
 					continue
@@ -387,6 +389,11 @@ func runIndexerAsFetcher(ctx context.Context, idxr *Indexer, startBlock, endBloc
 
 	close(blockEnqueueChan)
 	log.Info().Msgf("closing.")
+}
+
+func roundRobinTopic(idxr *Indexer) string {
+	topics := *idxr.cfg.Base.ModeTopics
+	return topics[int(time.Now().UnixNano())%len(topics)]
 }
 
 func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, endBlock int64) {
@@ -554,35 +561,31 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 
 	// pipe between fetcher and reader
 	pipe := make(chan core.IndexerBlockEventData)
-	go runPipe(ctx, idxr, rdb, idxr.cfg.Base.ModeTopic, pipe, blockRPCWorkerDataChan)
-
-	wg.Add(1)
-	if idxr.cfg.Base.GenesisIndex {
-		go idxr.processBlocks(
-			&wg,
-			core.HandleFailedBlock,
-			pipe,
-			blockEventsDataChan,
-			txDataChan,
-			dbChainID,
-			indexer.blockEventFilterRegistries,
-			chBlocks,
-			nil,
-			&indexer.cl.Codec)
-	} else {
-		go idxr.processBlocks(
-			&wg,
-			core.HandleFailedBlock,
-			pipe,
-			blockEventsDataChan,
-			txDataChan,
-			dbChainID,
-			indexer.blockEventFilterRegistries,
-			chBlocks,
-			cache,
-			&indexer.cl.Codec)
+	topic := ""
+	if idxr.cfg.Base.ModeTopics != nil {
+		topics := *idxr.cfg.Base.ModeTopics
+		topic = topics[0]
 	}
 
+	go runPipe(ctx, idxr, rdb, topic, pipe, blockRPCWorkerDataChan)
+
+	wg.Add(1)
+	go idxr.processBlocks(
+		&wg,
+		core.HandleFailedBlock,
+		pipe,
+		blockEventsDataChan,
+		txDataChan,
+		dbChainID,
+		indexer.blockEventFilterRegistries,
+		chBlocks,
+		func() *repository.Cache {
+			if idxr.cfg.Base.GenesisIndex {
+				return nil
+			}
+			return cache
+		}(),
+		&indexer.cl.Codec)
 	wg.Add(1)
 	go idxr.doDBUpdates(&wg, txDataChan, blockEventsDataChan, chTxs, repoTxs, cache)
 
@@ -695,7 +698,7 @@ func runPipe(ctx context.Context, idxr *Indexer, rdb *redis.Client, topic string
 				}
 				encoded := base64.StdEncoding.EncodeToString(bl)
 
-				err = rdb.Publish(ctx, idxr.cfg.Base.ModeTopic, encoded).Err()
+				err = rdb.Publish(ctx, topic, encoded).Err()
 				if err != nil {
 					log.Err(err).Msgf("💩error publishing block")
 					continue
@@ -1150,6 +1153,12 @@ func (idxr *Indexer) doDBUpdates(wg *sync.WaitGroup,
 			numEvents := len(eventData.blockDBWrapper.BeginBlockEvents) + len(eventData.blockDBWrapper.EndBlockEvents)
 			config.Log.Info(fmt.Sprintf("Indexing %v Block Events from block %d", numEvents, eventData.blockDBWrapper.Block.Height))
 			identifierLoggingString := fmt.Sprintf("block %d", eventData.blockDBWrapper.Block.Height)
+
+			bl := dbTypes.GetBlockByHeight(idxr.db, eventData.blockDBWrapper.Block.Height)
+			if bl.ID > 0 {
+				log.Info().Msgf("Block already indexed %d, ignoring", eventData.blockDBWrapper.Block.Height)
+				continue
+			}
 
 			indexedDataset, err := dbTypes.IndexBlockEvents(idxr.db, eventData.blockDBWrapper)
 			if err != nil {
