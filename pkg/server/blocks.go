@@ -503,7 +503,7 @@ func (r *blocksServer) UptimeByBlocks(ctx context.Context, in *pb.UptimeByBlocks
 }
 
 func (r *blocksServer) GetVotes(ctx context.Context, in *pb.GetVotesRequest) (*pb.GetVotesResponse, error) {
-	txs, err := r.srvTx.GetVotes(ctx, in.ValidatorAccountAddress)
+	txs, all, err := r.srvTx.GetVotes(ctx, in.ValidatorAccountAddress, in.Limit.Limit, in.Limit.Offset)
 	if err != nil {
 		return &pb.GetVotesResponse{}, err
 	}
@@ -521,7 +521,13 @@ func (r *blocksServer) GetVotes(ctx context.Context, in *pb.GetVotesRequest) (*p
 		})
 	}
 
-	return &pb.GetVotesResponse{Transactions: res}, nil
+	return &pb.GetVotesResponse{
+		Transactions: res,
+		Result: &pb.Result{
+			Limit:  in.Limit.Limit,
+			Offset: in.Limit.Offset,
+			All:    all,
+		}}, nil
 }
 
 func (r *blocksServer) GetPowerEvents(ctx context.Context, in *pb.GetPowerEventsRequest) (*pb.GetPowerEventsResponse, error) {

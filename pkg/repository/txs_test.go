@@ -730,6 +730,57 @@ func Test_GetVotesByAccounts(t *testing.T) {
 	require.Len(t, res, 1)
 }
 
+func Test_GetVotes(t *testing.T) {
+	defer func() {
+		_, err := postgresConn.Exec(context.Background(), `delete from votes_normalized`)
+		require.NoError(t, err)
+	}()
+
+	votes := `INSERT INTO votes_normalized(hash, weight, proposal_id, height, timestamp, option, voter)
+		VALUES('hash1', '1000', '2', 900, $1, 'YES', 'voter1'),
+			  ('hash2', '500', '3', 901, $1, 'NO', 'voter1'),
+			  ('hash3', '200', '4', 902, $1, 'YES', 'voter2');`
+	_, err := postgresConn.Exec(context.Background(), votes, time.Now().UTC())
+	require.NoError(t, err)
+
+	txsRepo := NewTxs(postgresConn)
+
+	t.Run("returns votes for a given voter", func(t *testing.T) {
+		res, total, err := txsRepo.GetVotes(context.Background(), "voter1", 100, 0)
+		require.NoError(t, err)
+		require.Equal(t, int64(2), total)
+		require.Len(t, res, 2)
+		require.Equal(t, "hash1", res[0].TxHash)
+		require.Equal(t, "hash2", res[1].TxHash)
+	})
+
+	t.Run("returns empty result for a voter with no votes", func(t *testing.T) {
+		res, total, err := txsRepo.GetVotes(context.Background(), "voter3", 100, 0)
+		require.NoError(t, err)
+		require.Equal(t, int64(0), total)
+		require.Len(t, res, 0)
+	})
+
+	t.Run("returns votes with correct proposal ID", func(t *testing.T) {
+		res, total, err := txsRepo.GetVotes(context.Background(), "voter2", 100, 0)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), total)
+		require.Len(t, res, 1)
+		require.Equal(t, 4, res[0].ProposalID)
+	})
+
+	t.Run("handles invalid proposal ID", func(t *testing.T) {
+		invalidVotes := `INSERT INTO votes_normalized(hash, weight, proposal_id, height, timestamp, option, voter)
+			VALUES('hash4', '300', 'invalid', 903, $1, 'YES', 'voter4');`
+		_, err := postgresConn.Exec(context.Background(), invalidVotes, time.Now().UTC())
+		require.NoError(t, err)
+
+		_, _, err = txsRepo.GetVotes(context.Background(), "voter4", 100, 0)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid proposal ID")
+	})
+}
+
 func Test_GetProposalDeposits(t *testing.T) {
 	defer func() {
 		_, err := postgresConn.Exec(context.Background(), `delete from depositors_normalized`)

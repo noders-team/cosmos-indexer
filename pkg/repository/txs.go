@@ -37,7 +37,7 @@ type Txs interface {
 		limit int64, offset int64) ([]*models.Tx, int64, error)
 	TransactionsByEventValue(ctx context.Context, values []string, messageType []string, includeEvents bool,
 		limit int64, offset int64) ([]*models.Tx, int64, error)
-	GetVotes(ctx context.Context, accountAddress string) ([]*model.VotesTransaction, error)
+	GetVotes(ctx context.Context, accountAddress string, limit int64, offset int64) ([]*model.VotesTransaction, int64, error)
 	GetVotesByAccounts(ctx context.Context, accounts []string, excludeAccounts bool, voteOption string,
 		proposalID int, byAccAddress *string, limit int64, offset int64, sortBy *model.SortBy) ([]*model.VotesTransaction, int64, error)
 	GetWalletsCountPerPeriod(ctx context.Context, startDate, endDate time.Time) (int64, error)
@@ -963,12 +963,15 @@ order by messages.message_index, message_events.index, message_event_attributes.
 	return data, nil
 }
 
-func (r *txs) GetVotes(ctx context.Context, accountAddress string) ([]*model.VotesTransaction, error) {
+func (r *txs) GetVotes(ctx context.Context, accountAddress string, limit int64, offset int64) ([]*model.VotesTransaction, int64, error) {
 	voterQuery := `SELECT timestamp, hash, height, voter, proposal_id, option, weight 
-					from votes_normalized where voter=$1 order by timestamp desc;`
-	rows, err := r.db.Query(ctx, voterQuery, accountAddress)
+					FROM votes_normalized 
+					WHERE voter=$1 
+					ORDER BY timestamp DESC 
+					LIMIT $2 OFFSET $3;`
+	rows, err := r.db.Query(ctx, voterQuery, accountAddress, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 	data := make([]*model.VotesTransaction, 0)
@@ -977,18 +980,25 @@ func (r *txs) GetVotes(ctx context.Context, accountAddress string) ([]*model.Vot
 		var proposalID string
 		if err = rows.Scan(&voteTx.Timestamp, &voteTx.TxHash, &voteTx.BlockHeight,
 			&voteTx.Voter, &proposalID, &voteTx.Option, &voteTx.Weight); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 
 		proposal, err := strconv.Atoi(proposalID)
 		if err != nil {
-			return nil, fmt.Errorf("invalid proposal ID: %s", proposalID)
+			return nil, 0, fmt.Errorf("invalid proposal ID: %s", proposalID)
 		}
 		voteTx.ProposalID = proposal
 
 		data = append(data, &voteTx)
 	}
-	return data, nil
+
+	countQuery := `SELECT COUNT(*) FROM votes_normalized WHERE voter=$1;`
+	var total int64
+	if err = r.db.QueryRow(ctx, countQuery, accountAddress).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	return data, total, nil
 }
 
 func (r *txs) GetVotesByAccounts(ctx context.Context, accounts []string, excludeAccounts bool, voteOption string,
