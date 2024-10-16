@@ -386,11 +386,13 @@ message VotesTransaction{
 }
 
 message GetVotesRequest{
-  string validator_account_address = 3;
+  string validator_account_address = 1;
+  Limit limit = 2;
 }
 
 message GetVotesResponse{
   repeated VotesTransaction transactions = 1;
+  Result result = 2;
 }
 
 message GetPowerEventsRequest {
