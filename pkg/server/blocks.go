@@ -527,7 +527,8 @@ func (r *blocksServer) GetVotes(ctx context.Context, in *pb.GetVotesRequest) (*p
 			Limit:  in.Limit.Limit,
 			Offset: in.Limit.Offset,
 			All:    all,
-		}}, nil
+		},
+	}, nil
 }
 
 func (r *blocksServer) GetPowerEvents(ctx context.Context, in *pb.GetPowerEventsRequest) (*pb.GetPowerEventsResponse, error) {
