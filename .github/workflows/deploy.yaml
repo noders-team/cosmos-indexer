@@ -31,7 +31,7 @@ jobs:
 
     strategy:
       matrix:
-        environment: [ 'celestia-prod,celestia' ]
+        environment: [ 'celestia-prod','celestia' ]
       fail-fast: false
 
     environment: ${{ matrix.environment }}
