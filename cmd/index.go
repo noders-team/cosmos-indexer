@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/noders-team/cosmos-indexer/tracing"
 	"io"
 	"net"
 	"os"
@@ -245,6 +246,12 @@ func index(_ *cobra.Command, _ []string) {
 
 	ctx := context.Background()
 	defer ctx.Done()
+
+	span, err := tracing.InitTracing(ctx)
+	if err != nil {
+		panic(err)
+	}
+	defer span.ForceFlush(ctx)
 
 	switch idxr.cfg.Base.Mode {
 	case modeFetcher:
