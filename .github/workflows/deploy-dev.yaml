@@ -3,8 +3,8 @@ name: Build and Deploy Cosmos-Indexer Docker Image
 on:
   workflow_dispatch:
   push:
-    tags:
-      - '*'
+    branches:
+      - dev
 
 jobs:
   build:
@@ -31,7 +31,7 @@ jobs:
 
     strategy:
       matrix:
-        environment: [ 'celestia-prod' ]
+        environment: [ 'celestia' ]
       fail-fast: false
 
     environment: ${{ matrix.environment }}
@@ -115,7 +115,7 @@ jobs:
               --restart unless-stopped \
               --network indexer_network \
               ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }} \
-              /bin/sh -c "/app/cosmos-indexer index \
+              /bin/sh -c "/bin/cosmos-indexer index \
                 --log.pretty=true \
                 --log.level=info \
                 --base.start-block=${{ vars.BASE_START_BLOCK }} \
