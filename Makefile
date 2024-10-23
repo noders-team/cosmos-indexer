@@ -28,6 +28,9 @@ all: install
 install: go.sum
 	go install .
 
+up:
+	docker-compose up --build
+
 build:
 	go build -o bin/cosmos-indexer .
 
