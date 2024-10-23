@@ -19,7 +19,7 @@ import (
 )
 
 func InitTracing(ctx context.Context) (sdktrace.SpanProcessor, error) {
-	dsn := "https://r9bxofQ3DPgtrPmizIdO_g@api.uptrace.dev?grpc=4317"
+	dsn := "https://DjhQK04JY-EuYI8xTTVrIw@api.uptrace.dev?grpc=4317"
 	uptrace.ConfigureOpentelemetry(
 		uptrace.WithDSN(dsn),
 		uptrace.WithServiceName("cosmos-indexer"),
