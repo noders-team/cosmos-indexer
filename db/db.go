@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
+	"gorm.io/plugin/opentelemetry/tracing"
 )
 
 func GetAddresses(addressList []string, db *gorm.DB) ([]models.Address, error) {
@@ -33,13 +34,16 @@ func PostgresDbConnect(host string, port string, database string, user string, p
 	if level == "info" {
 		gormLogLevel = logger.Info
 	}
-	return gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(gormLogLevel)})
-}
 
-// PostgresDbConnect connects to the database according to the passed in parameters
-func PostgresDbConnectLogInfo(host string, port string, database string, user string, password string) (*gorm.DB, error) {
-	dsn := fmt.Sprintf("host=%s port=%s dbname=%s user=%s password=%s sslmode=disable", host, port, database, user, password)
-	return gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Info)})
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(gormLogLevel)})
+	if err != nil {
+		return nil, err
+	}
+	if err = db.Use(tracing.NewPlugin()); err != nil {
+		return nil, err
+	}
+
+	return db, nil
 }
 
 // MigrateModels runs the gorm automigrations with all the db models. This will migrate as needed and do nothing if nothing has changed.

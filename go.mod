@@ -56,6 +56,7 @@ require (
 	google.golang.org/protobuf v1.35.1
 	gorm.io/driver/postgres v1.5.2
 	gorm.io/gorm v1.25.1
+	gorm.io/plugin/opentelemetry v0.1.7
 )
 
 require (
@@ -192,7 +193,7 @@ require (
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/sasha-s/go-deadlock v0.3.1 // indirect
-	github.com/sirupsen/logrus v1.9.0 // indirect
+	github.com/sirupsen/logrus v1.9.2 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.6.0 // indirect

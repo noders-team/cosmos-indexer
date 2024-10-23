@@ -5,13 +5,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/noders-team/cosmos-indexer/tracing"
 	"io"
 	"net"
 	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/noders-team/cosmos-indexer/tracing"
 
 	"gorm.io/gorm/clause"
 
@@ -691,7 +692,8 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 }
 
 func runPipe(ctx context.Context, idxr *Indexer, rdb *redis.Client, topic string,
-	pipe chan core.IndexerBlockEventData, blockRPCWorkerDataChan chan core.IndexerBlockEventData) {
+	pipe chan core.IndexerBlockEventData, blockRPCWorkerDataChan chan core.IndexerBlockEventData,
+) {
 	go func(ctx context.Context, rdb *redis.Client) {
 		for {
 			select {
