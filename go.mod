@@ -32,7 +32,7 @@ replace (
 require (
 	cosmossdk.io/api v0.3.1
 	github.com/cometbft/cometbft v0.37.5
-	github.com/cosmos/cosmos-sdk v0.47.11
+	github.com/cosmos/cosmos-sdk v0.47.14
 	github.com/cosmos/ibc-go/v7 v7.5.1
 	github.com/doug-martin/goqu/v9 v9.19.0
 	github.com/jackc/pgx/v5 v5.3.1
@@ -40,7 +40,7 @@ require (
 	github.com/nodersteam/probe v0.0.5
 	github.com/ory/dockertest/v3 v3.10.0
 	github.com/redis/go-redis/v9 v9.5.1
-	github.com/rs/zerolog v1.32.0
+	github.com/rs/zerolog v1.33.0
 	github.com/shopspring/decimal v1.3.1
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/pflag v1.0.5
@@ -66,7 +66,7 @@ require (
 	cosmossdk.io/core v0.5.1 // indirect
 	cosmossdk.io/depinject v1.0.0-alpha.4 // indirect
 	cosmossdk.io/errors v1.0.1 // indirect
-	cosmossdk.io/log v1.3.1 // indirect
+	cosmossdk.io/log v1.4.1 // indirect
 	cosmossdk.io/math v1.3.0 // indirect
 	cosmossdk.io/simapp v0.0.0-20230608160436-666c345ad23d // indirect
 	cosmossdk.io/tools/rosetta v0.2.1 // indirect
