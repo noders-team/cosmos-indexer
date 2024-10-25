@@ -3,9 +3,6 @@ package db
 import (
 	"errors"
 	"fmt"
-	"strings"
-	"unicode/utf8"
-
 	"github.com/noders-team/cosmos-indexer/config"
 	"github.com/noders-team/cosmos-indexer/db/models"
 	"gorm.io/gorm"
@@ -97,7 +94,7 @@ func IndexBlockEvents(db *gorm.DB, blockDBWrapper *BlockDBWrapper) (*BlockDBWrap
 			blockDBWrapper.Block.Signatures = signaturesCopy
 		}
 
-		var uniqueBlockEventTypes []models.BlockEventType
+		/*var uniqueBlockEventTypes []models.BlockEventType
 
 		for _, value := range blockDBWrapper.UniqueBlockEventTypes {
 			uniqueBlockEventTypes = append(uniqueBlockEventTypes, value)
@@ -236,7 +233,7 @@ func IndexBlockEvents(db *gorm.DB, blockDBWrapper *BlockDBWrapper) (*BlockDBWrap
 				})
 			}
 
-		}
+		}*/
 
 		return nil
 	})
