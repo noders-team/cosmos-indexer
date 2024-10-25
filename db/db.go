@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/rs/zerolog/log"
 	"go.opentelemetry.io/otel"
 	"strings"
 	"time"
@@ -601,18 +602,36 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 			tx.AuthInfo.FeeID = tx.AuthInfo.Fee.ID
 
 			for _, signerInfo := range tx.AuthInfo.SignerInfos {
-				if signerInfo.Address != nil {
-					if err := dbTransaction.Where(&signerInfo.Address).FirstOrCreate(&signerInfo.Address).Error; err != nil {
-						config.Log.Warnf("Error getting/creating signerInfo.Address DB object %v %v", err, signerInfo.Address)
-						err = dbTransaction.Rollback().Error
-						if err != nil {
-							config.Log.Warnf("error during rollback %v", err)
-						}
-						continue
+				res := dbTransaction.Raw(`
+					INSERT INTO addresses (address)
+					VALUES (?)
+					ON CONFLICT (address) DO NOTHING
+					RETURNING id`, signerInfo.Address.Address).Scan(&signerInfo.Address.ID)
+				if res.Error != nil {
+					config.Log.Warnf("Error getting/creating signerInfo.Address DB object %v %v", res.Error, signerInfo.Address)
+					err := dbTransaction.Rollback().Error
+					if err != nil {
+						config.Log.Warnf("error during rollback %v", err)
 					}
-					signerInfo.AddressID = signerInfo.Address.ID
+					continue
 				}
-				if err := dbTransaction.Where(&signerInfo).FirstOrCreate(&signerInfo).Error; err != nil { //nolint:gosec
+				if res.RowsAffected == 0 {
+					if err := dbTransaction.
+						Raw(`SELECT id from addresses where address = ?`, signerInfo.Address.Address).
+						Scan(&signerInfo.Address.ID).Error; err != nil {
+						config.Log.Warnf("Error getting signerInfo.Address DB object %v %v", err, signerInfo.Address)
+					}
+				}
+				signerInfo.AddressID = signerInfo.Address.ID
+				if signerInfo.AddressID == 0 {
+					log.Error().Msgf("Address ID is 0 for %v", signerInfo)
+					continue
+				}
+
+				if err := dbTransaction.Raw(`
+					INSERT INTO tx_signer_info (address_id, mode_info, sequence)
+					VALUES (?, ?, ?)
+					RETURNING id`, signerInfo.AddressID, signerInfo.ModeInfo, signerInfo.Sequence).Scan(&signerInfo.ID).Error; err != nil {
 					config.Log.Warnf("Error getting/creating signerInfo DB object %v %v", err, signerInfo)
 					err = dbTransaction.Rollback().Error
 					if err != nil {
