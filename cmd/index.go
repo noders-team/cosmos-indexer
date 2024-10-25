@@ -5,13 +5,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/uptrace/uptrace-go/uptrace"
 	"io"
 	"net"
 	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/uptrace/uptrace-go/uptrace"
 
 	"github.com/noders-team/cosmos-indexer/tracing"
 

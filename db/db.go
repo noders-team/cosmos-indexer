@@ -4,18 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/rs/zerolog/log"
-	"go.opentelemetry.io/otel"
 	"strings"
-	"time"
 
 	"github.com/noders-team/cosmos-indexer/config"
 	"github.com/noders-team/cosmos-indexer/db/models"
+	"github.com/rs/zerolog/log"
+	"go.opentelemetry.io/otel"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
-	"gorm.io/plugin/opentelemetry/logging/logrus"
 	"gorm.io/plugin/opentelemetry/tracing"
 )
 
@@ -40,19 +38,20 @@ func PostgresDbConnect(host string, port string, database string, user string, p
 		gormLogLevel = logger.Info
 	}
 
-	println(gormLogLevel)
+	/*
+		println(gormLogLevel)
 
-	logger := logger.New(
-		logrus.NewWriter(),
-		logger.Config{
-			SlowThreshold: time.Millisecond,
-			LogLevel:      logger.Warn,
-			Colorful:      false,
-		},
-	)
+		logger := logger.New(
+			logrus.NewWriter(),
+			logger.Config{
+				SlowThreshold: time.Millisecond,
+				LogLevel:      logger.Warn,
+				Colorful:      false,
+			},
+		)*/
 
-	//db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(gormLogLevel)})
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger})
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(gormLogLevel)})
+	// db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger})
 	if err != nil {
 		return nil, err
 	}
@@ -658,9 +657,22 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 			}
 
 			tx.AuthInfoID = tx.AuthInfo.ID
-			if err := dbTransaction.Where(&tx.TxResponse).Clauses(clause.OnConflict{ //nolint:gosec
-				DoNothing: true,
-			}).FirstOrCreate(&tx.TxResponse).Error; err != nil { //nolint:gosec
+
+			txResp := dbTransaction.Raw(`
+			INSERT INTO tx_responses (tx_hash, height, time_stamp, code, raw_log, gas_used, gas_wanted, codespace, data, info)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT (tx_hash) DO NOTHING
+			RETURNING id`, tx.TxResponse.TxHash,
+				tx.TxResponse.Height,
+				tx.TxResponse.TimeStamp,
+				tx.TxResponse.Code,
+				tx.TxResponse.RawLog,
+				tx.TxResponse.GasUsed,
+				tx.TxResponse.GasWanted,
+				tx.TxResponse.Codespace,
+				tx.TxResponse.Data,
+				tx.TxResponse.Info).Scan(&tx.TxResponse.ID)
+			if err := txResp.Error; err != nil {
 				config.Log.Warnf("Error getting/creating txResponse DB object. %v %v", err, tx.TxResponse)
 				err = dbTransaction.Rollback().Error
 				if err != nil {
@@ -668,6 +680,18 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 				}
 				continue
 			}
+			if txResp.RowsAffected == 0 {
+				if err := dbTransaction.Raw(`SELECT id from tx_responses where tx_hash = ?`, tx.TxResponse.TxHash).
+					Scan(&tx.TxResponse.ID).Error; err != nil {
+					config.Log.Warnf("Error getting txResponse DB object. %v %v", err, tx.TxResponse)
+					continue
+				}
+			}
+			if tx.TxResponse.ID == 0 {
+				log.Error().Msgf("TxResponse ID is 0 for %v", tx.TxResponse)
+				continue
+			}
+
 			tx.TxResponseID = tx.TxResponse.ID
 
 			var signerAddressID uint
