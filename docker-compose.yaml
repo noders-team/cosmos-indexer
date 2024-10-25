@@ -89,7 +89,7 @@ services:
         --base.throttling 2.005 \
         --base.rpc-workers 100 \
         --base.index-transactions true \
-        --base.index-block-events true \
+        --base.index-block-events false \
         --probe.rpc http://celestia-mainnet-consensus.itrocket.net:26657 \
         --probe.account-prefix celestia \
         --probe.chain-id celestia \
@@ -132,7 +132,7 @@ services:
       --base.throttling 2.005 \
       --base.rpc-workers 1 \
       --base.index-transactions true \
-      --base.index-block-events true \
+      --base.index-block-events false \
       --probe.rpc http://celestia-mainnet-consensus.itrocket.net:26657 \
       --probe.account-prefix celestia \
       --probe.chain-id celestia \
