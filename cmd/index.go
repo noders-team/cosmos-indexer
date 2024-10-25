@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/uptrace/uptrace-go/uptrace"
 	"io"
 	"net"
 	"os"
@@ -252,7 +253,10 @@ func index(_ *cobra.Command, _ []string) {
 	if err != nil {
 		panic(err)
 	}
-	defer span.ForceFlush(ctx)
+	defer uptrace.Shutdown(ctx)
+	defer span.Shutdown(ctx)
+
+	log.Info().Msgf("tracing initialized")
 
 	switch idxr.cfg.Base.Mode {
 	case modeFetcher:
@@ -275,6 +279,8 @@ func index(_ *cobra.Command, _ []string) {
 		}
 		runIndexer(ctx, idxr, true, idxr.cfg.Base.StartBlock, idxr.cfg.Base.EndBlock)
 	}
+
+	log.Info().Msgf("====EXITED=====")
 }
 
 func runIndexerAsFetcher(ctx context.Context, idxr *Indexer, startBlock, endBlock int64) {
