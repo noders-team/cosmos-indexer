@@ -578,7 +578,6 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 		var txesSlice []models.Tx
 		config.Log.Infof("Unique Txs size %d for block %d", len(uniqueTxes), block.Height)
 		for _, tx := range uniqueTxes {
-
 			// create auth_info address if it doesn't exist
 			if err := dbTransaction.Where(&tx.AuthInfo.Tip).FirstOrCreate(&tx.AuthInfo.Tip).Error; err != nil { //nolint:gosec
 				config.Log.Warnf("Error getting/creating Tip DB object. %v %v", err, tx.AuthInfo.Tip)
@@ -590,15 +589,23 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 			}
 			tx.AuthInfo.TipID = tx.AuthInfo.Tip.ID
 
-			if err := dbTransaction.Where(&tx.AuthInfo.Fee).FirstOrCreate(&tx.AuthInfo.Fee).Error; err != nil { //nolint:gosec
-				config.Log.Warnf("Error getting/creating Fee DB object. %v %v", err, tx.AuthInfo.Fee)
+			if err := dbTransaction.Raw(`
+				INSERT INTO tx_auth_info_fee (gas_limit, payer, granter)
+				VALUES (?,?,?)
+				RETURNING id`, tx.AuthInfo.Fee.GasLimit, tx.AuthInfo.Fee.Payer, tx.AuthInfo.Fee.Granter).
+				Scan(&tx.AuthInfo.Fee.ID).Error; err != nil {
+
+				config.Log.Warnf("Error getting/creating AuthInfo.Fee DB object. %v %v", err, tx.AuthInfo.Fee)
 				err = dbTransaction.Rollback().Error
 				if err != nil {
 					config.Log.Warnf("error during rollback %v", err)
 				}
 				continue
 			}
-
+			if tx.AuthInfo.Fee.ID == 0 {
+				log.Error().Msgf("Fee ID is 0 for %v", tx.AuthInfo.Fee)
+				continue
+			}
 			tx.AuthInfo.FeeID = tx.AuthInfo.Fee.ID
 
 			for _, signerInfo := range tx.AuthInfo.SignerInfos {
