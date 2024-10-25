@@ -65,7 +65,6 @@ func InitTracing(ctx context.Context) (sdktrace.SpanProcessor, error) {
 	otel.SetTracerProvider(tracerProvider)
 
 	// meter provider
-
 	exporterMetric, err := otlpmetricgrpc.New(ctx,
 		otlpmetricgrpc.WithEndpoint("otlp.uptrace.dev:4317"),
 		otlpmetricgrpc.WithHeaders(map[string]string{

@@ -24,6 +24,9 @@ replace (
 	github.com/tidwall/btree => github.com/tidwall/btree v1.6.0
 
 	golang.org/x/exp => golang.org/x/exp v0.0.0-20230711153332-06a737ee72cb
+
+	google.golang.org/grpc => google.golang.org/grpc v1.64.0
+	google.golang.org/protobuf => google.golang.org/protobuf v1.34.1
 )
 
 require (
@@ -236,7 +239,6 @@ require (
 	golang.org/x/term v0.25.0 // indirect
 	golang.org/x/text v0.19.0 // indirect
 	golang.org/x/tools v0.22.0 // indirect
-	google.golang.org/api v0.162.0 // indirect
 	google.golang.org/genproto v0.0.0-20240227224415-6ceb2ff114de // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20241015192408-796eee8c2d53 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241015192408-796eee8c2d53 // indirect
