@@ -288,7 +288,7 @@ func runIndexerAsFetcher(ctx context.Context, idxr *Indexer, startBlock, endBloc
 	// blockChans are just the block heights; limit max jobs in the queue, otherwise this queue would contain one
 	// item (block height) for every block on the entire blockchain we're indexing. Furthermore, once the queue
 	// is close to empty, we will spin up a new thread to fill it up with new jobs.
-	blockEnqueueChan := make(chan *core.EnqueueData, 10000)
+	blockEnqueueChan := make(chan *core.EnqueueData, 1000000)
 
 	// This channel represents query job results for the RPC queries to Cosmos Nodes. Every time an RPC query
 	// completes, the query result will be sent to this channel (for later processing by a different thread).
@@ -345,26 +345,50 @@ func runIndexerAsFetcher(ctx context.Context, idxr *Indexer, startBlock, endBloc
 	})
 
 	go func(ctx context.Context) {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case newBlock := <-blockRPCWorkerDataChan:
-				bl, err := newBlock.MarshalJSON(&idxr.cl.Codec)
-				if err != nil {
-					log.Err(err).Msgf("💩error marshalling block")
-					continue
-				}
-
-				encoded := base64.StdEncoding.EncodeToString(bl)
-				err = rdb.Publish(ctx, roundRobinTopic(idxr), encoded).Err()
-				if err != nil {
-					log.Err(err).Msgf("💩error publishing block")
-					continue
-				}
-				log.Info().Msgf("🤌block %d published successfully", newBlock.BlockData.Block.Height)
+		blockCounter := 0
+		for newBlock := range blockRPCWorkerDataChan {
+			if blockCounter == 5000 { // TODO move it to config
+				log.Info().Msgf("hit the block counter, sleeping.... %d", len(blockRPCWorkerDataChan))
+				time.Sleep(5 * time.Minute)
 			}
+
+			bl, err := newBlock.MarshalJSON(&idxr.cl.Codec)
+			if err != nil {
+				log.Err(err).Msgf("💩error marshalling block")
+				continue
+			}
+
+			encoded := base64.StdEncoding.EncodeToString(bl)
+			err = rdb.Publish(ctx, roundRobinTopic(idxr), encoded).Err()
+			if err != nil {
+				log.Err(err).Msgf("💩error publishing block")
+				continue
+			}
+			log.Info().Msgf("🤌block %d published successfully", newBlock.BlockData.Block.Height)
+			blockCounter++
 		}
+
+		/*
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case newBlock := <-blockRPCWorkerDataChan:
+					bl, err := newBlock.MarshalJSON(&idxr.cl.Codec)
+					if err != nil {
+						log.Err(err).Msgf("💩error marshalling block")
+						continue
+					}
+
+					encoded := base64.StdEncoding.EncodeToString(bl)
+					err = rdb.Publish(ctx, roundRobinTopic(idxr), encoded).Err()
+					if err != nil {
+						log.Err(err).Msgf("💩error publishing block")
+						continue
+					}
+					log.Info().Msgf("🤌block %d published successfully", newBlock.BlockData.Block.Height)
+				}
+			}*/
 	}(ctx)
 
 	ctxPing, cancel := context.WithTimeout(ctx, 5*time.Second)

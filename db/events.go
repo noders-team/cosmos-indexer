@@ -3,6 +3,7 @@ package db
 import (
 	"errors"
 	"fmt"
+
 	"github.com/noders-team/cosmos-indexer/config"
 	"github.com/noders-team/cosmos-indexer/db/models"
 	"gorm.io/gorm"
