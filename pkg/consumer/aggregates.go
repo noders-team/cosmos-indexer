@@ -26,7 +26,7 @@ func NewAggregatesConsumer(totals repository.TotalsCache, blocks repository.Bloc
 
 func (s *aggregatesConsumer) Consume(ctx context.Context) error {
 	log.Info().Msg("starting aggregates consumer")
-	t := time.NewTicker(5 * time.Second)
+	t := time.NewTicker(15 * time.Second)
 
 	for {
 		select {
@@ -42,6 +42,9 @@ func (s *aggregatesConsumer) Consume(ctx context.Context) error {
 }
 
 func (s *aggregatesConsumer) storeAggregated(ctx context.Context) error {
+	started := time.Now()
+	log.Info().Msgf("started storing aggregated data %s", started.String())
+
 	blocksTotal, err := s.blocks.TotalBlocks(ctx, time.Now().UTC())
 	if err != nil {
 		log.Err(err).Msg("failed to fetch total blocks")
@@ -73,6 +76,8 @@ func (s *aggregatesConsumer) storeAggregated(ctx context.Context) error {
 		Transactions: res,
 		Wallets:      *wallets,
 	}
+
+	log.Info().Msgf("finished storing aggregated data %s, duration: %s", time.Now(), time.Since(started))
 
 	return s.totals.AddTotals(ctx, info)
 }
