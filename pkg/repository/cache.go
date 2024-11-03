@@ -173,7 +173,7 @@ func (s *Cache) AddTotals(ctx context.Context, info *model.AggregatedInfo) error
 	if err != nil {
 		return err
 	}
-	return s.rdb.Set(ctx, totalsKey, string(res), 1*time.Minute).Err()
+	return s.rdb.Set(ctx, totalsKey, string(res), 2*time.Minute).Err()
 }
 
 func (s *Cache) GetTotals(ctx context.Context) (*model.AggregatedInfo, error) {
