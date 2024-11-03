@@ -350,6 +350,7 @@ func runIndexerAsFetcher(ctx context.Context, idxr *Indexer, startBlock, endBloc
 			if blockCounter == 5000 { // TODO move it to config
 				log.Info().Msgf("hit the block counter, sleeping.... %d", len(blockRPCWorkerDataChan))
 				time.Sleep(5 * time.Minute)
+				blockCounter = 0
 			}
 
 			bl, err := newBlock.MarshalJSON(&idxr.cl.Codec)
@@ -364,7 +365,7 @@ func runIndexerAsFetcher(ctx context.Context, idxr *Indexer, startBlock, endBloc
 				log.Err(err).Msgf("💩error publishing block")
 				continue
 			}
-			log.Info().Msgf("🤌block %d published successfully", newBlock.BlockData.Block.Height)
+			log.Info().Msgf("🤌block %d published successfully, counter %d", newBlock.BlockData.Block.Height, blockCounter)
 			blockCounter++
 		}
 
