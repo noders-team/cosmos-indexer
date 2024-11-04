@@ -347,9 +347,9 @@ func runIndexerAsFetcher(ctx context.Context, idxr *Indexer, startBlock, endBloc
 	go func(ctx context.Context) {
 		blockCounter := 0
 		for newBlock := range blockRPCWorkerDataChan {
-			if blockCounter == 5000 { // TODO move it to config
-				log.Info().Msgf("hit the block counter, sleeping.... %d", len(blockRPCWorkerDataChan))
-				time.Sleep(5 * time.Minute)
+			if blockCounter >= idxr.cfg.Base.ModeCoolDownCount {
+				log.Info().Msgf("hit the block counter, sleeping.... %d (in memory waiting)", len(blockRPCWorkerDataChan))
+				time.Sleep(time.Duration(idxr.cfg.Base.ModeCoolDownMins) * time.Minute)
 				blockCounter = 0
 			}
 

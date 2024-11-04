@@ -25,6 +25,8 @@ type IndexBase struct {
 	RetryBase
 	Mode                       string    `mapstructure:"mode"`
 	ModeTopics                 *[]string `mapstructure:"mode-storage-topics"`
+	ModeCoolDownMins           int       `mapstructure:"mode-cooldown-mins"`
+	ModeCoolDownCount          int       `mapstructure:"mode-cooldown-count"`
 	ReindexMessageType         string    `mapstructure:"reindex-message-type"`
 	ReattemptFailedBlocks      bool      `mapstructure:"reattempt-failed-blocks"`
 	GenesisIndex               bool      `mapstructure:"genesis-index"`
@@ -78,6 +80,8 @@ func SetupIndexSpecificFlags(conf *IndexConfig, cmd *cobra.Command) {
 	// run-mode
 	cmd.PersistentFlags().StringVar(&conf.Base.Mode, "base.mode", "normal", "running mode, can be normal(default), fetcher or storage")
 	conf.Base.ModeTopics = cmd.PersistentFlags().StringArray("base.mode-topics", []string{""}, "topic for fetcher and storage modes")
+	cmd.PersistentFlags().IntVar(&conf.Base.ModeCoolDownMins, "base.mode-cooldown-mins", 5, "cool down period for mode fetcher")
+	cmd.PersistentFlags().IntVar(&conf.Base.ModeCoolDownCount, "base.mode-cooldown-count", 5000, "cool down count for mode fetcher")
 	cmd.PersistentFlags().StringVar(&conf.ConfigFileLocation, "config-file", "", "config file location")
 }
 
