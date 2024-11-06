@@ -296,7 +296,8 @@ func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 					block, blockExists := blocksInDB[currBlock]
 
 					// Skip blocks already in DB that do not need indexing according to the config
-					if !reindexing && blockExists {
+					// if !reindexing && blockExists { TODO return it back
+					if blockExists {
 						config.Log.Debugf("Block %d already in DB, checking if it needs indexing", currBlock)
 
 						needsIndex := false
