@@ -133,8 +133,7 @@ func (s *IndexerBlockEventData) UnmarshalJSON(data []byte) error {
 type BlockRPCWorker interface {
 	Worker(wg *sync.WaitGroup,
 		blockEnqueueChan chan *EnqueueData,
-		result chan<- IndexerBlockEventData,
-		ignoreExisting bool)
+		result chan<- IndexerBlockEventData)
 	FetchBlock(rpcClient rpc.URIClient,
 		block *EnqueueData) *IndexerBlockEventData
 }
@@ -168,7 +167,6 @@ func NewBlockRPCWorker(
 func (w *blockRPCWorker) Worker(wg *sync.WaitGroup,
 	blockEnqueueChan chan *EnqueueData,
 	result chan<- IndexerBlockEventData,
-	ignoreExisting bool,
 ) {
 	defer wg.Done()
 	rpcClient := rpc.URIClient{
@@ -186,13 +184,6 @@ func (w *blockRPCWorker) Worker(wg *sync.WaitGroup,
 
 		tmStart := time.Now()
 		log.Debug().Msgf("====> picked ip block for fetching %d %s", block.Height, tmStart.String())
-		if ignoreExisting {
-			bl := dbTypes.GetBlockByHeight(w.db, block.Height)
-			if bl.ID > 0 {
-				log.Info().Msgf("Block already indexed %d, ignoring", block.Height)
-				continue
-			}
-		}
 		currentHeightIndexerData := w.FetchBlock(rpcClient, block)
 		if currentHeightIndexerData == nil {
 			continue

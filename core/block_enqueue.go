@@ -152,7 +152,7 @@ func GenerateMsgTypeEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 // indexed according to the current configuration.
 // If failed block reattempts are enabled, it will enqueue those according to the passed in configuration as well.
 func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID uint,
-	rpcClient clients.ChainRPC, startBlock, endBlock int64,
+	rpcClient clients.ChainRPC, startBlock, endBlock int64, allBlocks map[int64]struct{},
 ) (func(chan *EnqueueData) error, error) {
 	var failedBlockEnqueueData []*EnqueueData
 	if cfg.Base.ReattemptFailedBlocks {
@@ -212,7 +212,9 @@ func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 
 	var blocksFromStart []models.Block
 
-	if !reindexing {
+	if reindexing {
+		config.Log.Info("Reindexing is enabled starting from initial start height")
+	} else {
 		var err error
 		config.Log.Info("Reindexing is disabled, skipping blocks that have already been indexed")
 		// We need to pick up where we last left off, find blocks after start and skip already indexed blocks
@@ -224,8 +226,6 @@ func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 			config.Log.Info(fmt.Sprintf("start blocks: %d", blocksFromStart[0].Height))
 			startBlock = blocksFromStart[0].Height
 		}
-	} else {
-		config.Log.Info("Reindexing is enabled starting from initial start height")
 	}
 
 	log.Info().Msgf("block queue start and end blocks: %d - %d", startBlock, endBlock)
@@ -274,6 +274,15 @@ func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 				return nil
 			}
 
+			if len(allBlocks) > 0 {
+				_, exists := allBlocks[currBlock]
+				if exists {
+					config.Log.Infof("===> Block %d already indexed, skipping", currBlock)
+					currBlock++
+					continue
+				}
+			}
+
 			// The job queue is running out of jobs to process, see if the blockchain has produced any new blocks we haven't indexed yet.
 			if len(blockChan) <= cap(blockChan)/4 {
 				// This is the latest block height available on the Node.
@@ -296,8 +305,7 @@ func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 					block, blockExists := blocksInDB[currBlock]
 
 					// Skip blocks already in DB that do not need indexing according to the config
-					// if !reindexing && blockExists { TODO return it back
-					if blockExists {
+					if !reindexing && blockExists {
 						config.Log.Debugf("Block %d already in DB, checking if it needs indexing", currBlock)
 
 						needsIndex := false

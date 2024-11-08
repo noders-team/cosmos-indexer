@@ -323,13 +323,9 @@ func runIndexerAsFetcher(ctx context.Context, idxr *Indexer, startBlock, endBloc
 		idxr.rpcClient,
 	)
 
-	ignoreExisting := false
-	if idxr.cfg.Base.GenesisIndex {
-		ignoreExisting = true
-	}
 	for i := 0; i < rpcQueryThreads; i++ {
 		blockRPCWaitGroup.Add(1)
-		go worker.Worker(&blockRPCWaitGroup, blockEnqueueChan, blockRPCWorkerDataChan, ignoreExisting)
+		go worker.Worker(&blockRPCWaitGroup, blockEnqueueChan, blockRPCWorkerDataChan)
 	}
 
 	go func() {
@@ -368,28 +364,6 @@ func runIndexerAsFetcher(ctx context.Context, idxr *Indexer, startBlock, endBloc
 			log.Info().Msgf("🤌block %d published successfully, counter %d", newBlock.BlockData.Block.Height, blockCounter)
 			blockCounter++
 		}
-
-		/*
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case newBlock := <-blockRPCWorkerDataChan:
-					bl, err := newBlock.MarshalJSON(&idxr.cl.Codec)
-					if err != nil {
-						log.Err(err).Msgf("💩error marshalling block")
-						continue
-					}
-
-					encoded := base64.StdEncoding.EncodeToString(bl)
-					err = rdb.Publish(ctx, roundRobinTopic(idxr), encoded).Err()
-					if err != nil {
-						log.Err(err).Msgf("💩error publishing block")
-						continue
-					}
-					log.Info().Msgf("🤌block %d published successfully", newBlock.BlockData.Block.Height)
-				}
-			}*/
 	}(ctx)
 
 	ctxPing, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -409,9 +383,16 @@ func runIndexerAsFetcher(ctx context.Context, idxr *Indexer, startBlock, endBloc
 		endBlockInternal := counter + blocksToProceed
 
 		log.Info().Msgf("🚀starting indexer for blocks %d - %d", counter, endBlockInternal)
-
+		allBlocks := make(map[int64]struct{})
+		bls, err := dbTypes.GetBlocksInRange(idxr.db, dbChainID, counter, endBlockInternal)
+		if err == nil {
+			for _, b := range bls {
+				allBlocks[b.Height] = struct{}{}
+			}
+		}
+		log.Info().Msgf("%d", len(allBlocks))
 		blockEnqueueFunction, err := core.GenerateDefaultEnqueueFunction(idxr.db, *idxr.cfg, dbChainID,
-			idxr.rpcClient, counter, endBlockInternal)
+			idxr.rpcClient, counter, endBlockInternal, allBlocks)
 		if err != nil {
 			config.Log.Fatal("Failed to generate block enqueue function", err)
 		}
@@ -477,13 +458,9 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 		idxr.rpcClient,
 	)
 
-	ignoreExisting := false
-	if idxr.cfg.Base.GenesisIndex {
-		ignoreExisting = true
-	}
 	for i := 0; i < rpcQueryThreads; i++ {
 		blockRPCWaitGroup.Add(1)
-		go worker.Worker(&blockRPCWaitGroup, blockEnqueueChan, blockRPCWorkerDataChan, ignoreExisting)
+		go worker.Worker(&blockRPCWaitGroup, blockEnqueueChan, blockRPCWorkerDataChan)
 	}
 
 	go func() {
@@ -672,9 +649,16 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 			endBlockInternal := counter + blocksToProceed
 
 			log.Info().Msgf("🚀starting indexer for blocks %d - %d", counter, endBlockInternal)
+			allBlocks := make(map[int64]struct{})
+			bls, err := dbTypes.GetBlocksInRange(idxr.db, dbChainID, counter, endBlockInternal)
+			if err == nil {
+				for _, b := range bls {
+					allBlocks[b.Height] = struct{}{}
+				}
+			}
 
 			blockEnqueueFunction, err := core.GenerateDefaultEnqueueFunction(idxr.db, *idxr.cfg, dbChainID,
-				idxr.rpcClient, counter, endBlockInternal)
+				idxr.rpcClient, counter, endBlockInternal, allBlocks)
 			if err != nil {
 				config.Log.Fatal("Failed to generate block enqueue function", err)
 			}
@@ -690,6 +674,7 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 
 		<-ctx.Done() // TODO find better place
 	} else {
+		emptyBl := make(map[int64]struct{})
 		var blockEnqueueFunction func(chan *core.EnqueueData) error
 		switch {
 		// Default block enqueue functions based on config values
@@ -706,7 +691,7 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 			}
 		default:
 			blockEnqueueFunction, err = core.GenerateDefaultEnqueueFunction(idxr.db, *idxr.cfg, dbChainID,
-				idxr.rpcClient, startBlock, endBlock)
+				idxr.rpcClient, startBlock, endBlock, emptyBl)
 			if err != nil {
 				config.Log.Fatal("Failed to generate block enqueue function", err)
 			}
