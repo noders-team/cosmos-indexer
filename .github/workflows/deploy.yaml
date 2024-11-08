@@ -74,9 +74,6 @@ jobs:
             # Check if the Redis container is running, and start it if not
             if [ $(sudo docker ps -a --filter "name=^redis$" --format "{{.Names}}" | wc -l) -eq 0 ]; then
               echo "client-output-buffer-limit pubsub 51200mb 51200mb 60" > redis.conf
-              echo "protected-mode yes" >> redis.conf
-              echo "maxmemory-policy allkeys-lru" >> redis.conf
-              echo "timeout 300" >> redis.conf
               sudo docker run -d --name redis \
                 --restart unless-stopped \
                 -p 6379:6379 \
