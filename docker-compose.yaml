@@ -84,16 +84,18 @@ services:
         --log.pretty = true \
         --log.level = info \
         --base.mode fetcher \
-        --base.start-block 2000000 \
-        --base.end-block 2010000 \
+        --base.start-block 1 \
+        --base.end-block 500 \
         --base.throttling 2.005 \
-        --base.rpc-workers 100 \
+        --base.rpc-workers 2 \
         --base.index-transactions true \
         --base.index-block-events false \
+        --base.genesis-blocks-step 100 \
         --probe.rpc http://celestia-mainnet-consensus.itrocket.net:26657 \
         --probe.account-prefix celestia \
         --probe.chain-id celestia \
         --probe.chain-name celestia \
+        --base.reindex true \
         --database.host postgres \
         --database.database postgres \
         --database.user taxuser \
