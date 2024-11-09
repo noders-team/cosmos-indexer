@@ -1,0 +1,23 @@
+name: Build and deploy PostgreSQL image
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    environment: postgres-build
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Docker Login
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Push PostgreSQL image
+        run: sudo docker pull ghcr.io/noders-team/cosmos-explorer/postgres-15:custom
