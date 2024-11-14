@@ -13,6 +13,7 @@ type Blocks interface {
 	BlockInfoByHash(ctx context.Context, hash string) (*model.BlockInfo, error)
 	BlockValidators(ctx context.Context, block int32) ([]string, error)
 	TotalBlocks(ctx context.Context, to time.Time) (*model.TotalBlocks, error)
+	LatestBlockHeight(ctx context.Context) (int64, error)
 	Blocks(ctx context.Context, limit int64, offset int64) ([]*model.BlockInfo, int64, error)
 	BlockSignatures(ctx context.Context, height int64, valAddress []string,
 		limit int64, offset int64) ([]*model.BlockSigners, int64, error)
@@ -44,6 +45,10 @@ func (s *blocks) BlockValidators(ctx context.Context, block int32) ([]string, er
 
 func (s *blocks) TotalBlocks(ctx context.Context, to time.Time) (*model.TotalBlocks, error) {
 	return s.blocksRepo.TotalBlocks(ctx, to)
+}
+
+func (s *blocks) LatestBlockHeight(ctx context.Context) (int64, error) {
+	return s.blocksRepo.LatestBlockHeight(ctx)
 }
 
 func (s *blocks) Blocks(ctx context.Context, limit int64, offset int64) ([]*model.BlockInfo, int64, error) {

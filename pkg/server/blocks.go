@@ -384,6 +384,12 @@ func (r *blocksServer) CacheAggregated(ctx context.Context,
 		return &pb.CacheAggregatedResponse{}, err
 	}
 
+	// TODO not the best place
+	lastBlock, err := r.srv.LatestBlockHeight(ctx)
+	if err == nil {
+		info.Blocks.BlockHeight = lastBlock
+	}
+
 	return &pb.CacheAggregatedResponse{
 		Transactions: r.toTotalTransactionsProto(&info.Transactions),
 		Blocks:       r.toTotalBlocksProto(&info.Blocks),
