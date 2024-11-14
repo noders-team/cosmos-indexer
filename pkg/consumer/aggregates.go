@@ -26,7 +26,7 @@ func NewAggregatesConsumer(totals repository.TotalsCache, blocks repository.Bloc
 
 func (s *aggregatesConsumer) Consume(ctx context.Context) error {
 	log.Info().Msg("starting aggregates consumer")
-	t := time.NewTicker(15 * time.Second)
+	t := time.NewTicker(5 * time.Second)
 
 	for {
 		select {

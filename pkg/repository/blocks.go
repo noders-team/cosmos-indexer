@@ -21,6 +21,7 @@ type Blocks interface {
 	GetBlockValidators(ctx context.Context, block int32) ([]string, error)
 	TotalBlocks(ctx context.Context, to time.Time) (*model.TotalBlocks, error)
 	Blocks(ctx context.Context, limit int64, offset int64) ([]*model.BlockInfo, int64, error)
+	LatestBlockHeight(ctx context.Context) (int64, error)
 	BlockSignatures(ctx context.Context, height int64, valAddress []string,
 		limit int64, offset int64) ([]*model.BlockSigners, int64, error)
 	BlockUptime(ctx context.Context, blockWindow, height int64,
@@ -165,6 +166,16 @@ func (r *blocks) GetBlockValidators(ctx context.Context, block int32) ([]string,
 	}
 
 	return data, nil
+}
+
+func (r *blocks) LatestBlockHeight(ctx context.Context) (int64, error) {
+	query := `select blocks.height from blocks order by blocks.height desc limit 1`
+	row := r.db.QueryRow(ctx, query)
+	var blockHeight int64
+	if err := row.Scan(&blockHeight); err != nil {
+		return 0, err
+	}
+	return blockHeight, nil
 }
 
 func (r *blocks) TotalBlocks(ctx context.Context, to time.Time) (*model.TotalBlocks, error) {
