@@ -1,9 +1,8 @@
 package db
 
 import (
+	"errors"
 	"fmt"
-	"strings"
-	"unicode/utf8"
 
 	"github.com/noders-team/cosmos-indexer/config"
 	"github.com/noders-team/cosmos-indexer/db/models"
@@ -54,26 +53,40 @@ func IndexBlockEvents(db *gorm.DB, blockDBWrapper *BlockDBWrapper) (*BlockDBWrap
 				ChainID: blockDBWrapper.Block.ChainID,
 			}).
 			Assign(models.Block{
+				ID:                  blockDBWrapper.Block.ID,
 				BlockEventsIndexed:  true,
 				TimeStamp:           blockDBWrapper.Block.TimeStamp,
 				ProposerConsAddress: blockDBWrapper.Block.ProposerConsAddress,
-			})
+			}).
+			Clauses(
+				clause.Returning{Columns: []clause.Column{{Name: "id"}}},
+				clause.OnConflict{
+					Columns:   []clause.Column{{Name: "height"}, {Name: "chain_id"}},
+					DoNothing: true,
+				})
 		err := tx.FirstOrCreate(&blockDBWrapper.Block).Error
 		if err != nil {
-			config.Log.Error("Error getting/creating block DB object.", err)
+			config.Log.Error("Error getting/creating block DB object", err)
 			return err
+		}
+
+		// Ensure block ID is set before saving signatures
+		blockID := blockDBWrapper.Block.ID
+		if blockID == 0 {
+			config.Log.Errorf("Block ID is not set. Cannot save signatures. %d", blockDBWrapper.Block.Height)
+			return errors.New("block ID is not set")
 		}
 
 		// saving signatures
 		if len(signaturesCopy) > 0 {
 			for ind := range signaturesCopy {
-				signaturesCopy[ind].BlockID = uint64(blockDBWrapper.Block.ID)
+				signaturesCopy[ind].BlockID = uint64(blockID)
 			}
 
 			err = dbTransaction.Clauses(
 				clause.OnConflict{
 					Columns:   []clause.Column{{Name: "block_id"}, {Name: "validator_address"}},
-					UpdateAll: true,
+					DoNothing: true,
 				}).CreateInBatches(signaturesCopy, 1000).Error
 			if err != nil {
 				config.Log.Error("Error creating block signatures.", err)
@@ -82,7 +95,7 @@ func IndexBlockEvents(db *gorm.DB, blockDBWrapper *BlockDBWrapper) (*BlockDBWrap
 			blockDBWrapper.Block.Signatures = signaturesCopy
 		}
 
-		var uniqueBlockEventTypes []models.BlockEventType
+		/*var uniqueBlockEventTypes []models.BlockEventType
 
 		for _, value := range blockDBWrapper.UniqueBlockEventTypes {
 			uniqueBlockEventTypes = append(uniqueBlockEventTypes, value)
@@ -221,7 +234,7 @@ func IndexBlockEvents(db *gorm.DB, blockDBWrapper *BlockDBWrapper) (*BlockDBWrap
 				})
 			}
 
-		}
+		}*/
 
 		return nil
 	})
