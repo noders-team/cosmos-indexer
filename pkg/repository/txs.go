@@ -899,7 +899,7 @@ func (r *txs) TransactionsByEventValue(ctx context.Context, values []string, mes
 	limit int64, offset int64,
 ) ([]*models.Tx, int64, error) {
 	startTime := time.Now()
-	log.Debug().Msgf("=> start TransactionsByEventValue %s", startTime.String())
+	log.Info().Msgf("=> start TransactionsByEventValue %s", startTime.String())
 
 	query, args := r.transactionsByEventValuePrepareV2(values, messageType, limit, offset)
 
@@ -908,7 +908,7 @@ func (r *txs) TransactionsByEventValue(ctx context.Context, values []string, mes
 		return nil, 0, err
 	}
 	defer rows.Close()
-	log.Debug().Msgf("=> TransactionsByEventValue done in: %s", time.Since(startTime).String())
+	log.Info().Msgf("=> TransactionsByEventValue done in: %s", time.Since(startTime).String())
 
 	txHashes := make([]string, 0)
 	for rows.Next() {
@@ -936,7 +936,7 @@ func (r *txs) TransactionsByEventValue(ctx context.Context, values []string, mes
 		}
 	}
 
-	log.Debug().Msgf("=> TransactionsByEventValue after loop in: %s", time.Since(startTime).String())
+	log.Info().Msgf("=> TransactionsByEventValue after loop in: %s", time.Since(startTime).String())
 
 	// calculating total count
 	params := 2
