@@ -46,6 +46,7 @@ type Txs interface {
 	TxCountByAccounts(ctx context.Context, accounts []string) ([]*model.WalletWithTxs, error)
 	AccountInfo(ctx context.Context, account string) (*model.AccountInfo, error)
 	GetEvents(ctx context.Context, txID uint) ([]*model.TxEvents, error)
+	GetEventsV2(ctx context.Context, txHash string) ([]*model.TxEvents, error)
 	UpdateViews(ctx context.Context) error
 	ExtractNumber(value string) (decimal.Decimal, string, error)
 	DelegatesByValidator(ctx context.Context, from, to time.Time, valoperAddress string,
@@ -930,7 +931,7 @@ func (r *txs) TransactionsByEventValue(ctx context.Context, values []string, mes
 
 	for _, tx := range data {
 		if includeEvents {
-			events, err := r.GetEvents(ctx, tx.ID)
+			events, err := r.GetEventsV2(ctx, tx.Hash)
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return nil, 0, err
 			}
@@ -993,6 +994,35 @@ from txes
 where txes.id=$1
 order by messages.message_index, message_events.index, message_event_attributes.index`
 	rows, err := r.db.Query(ctx, query, txID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	data := make([]*model.TxEvents, 0)
+	for rows.Next() {
+		var event model.TxEvents
+		if err = rows.Scan(&event.MessageType, &event.EventIndex, &event.Type, &event.Index, &event.Value, &event.Key); err != nil {
+			log.Err(err).Msgf("error scanning row in GetEvents, ignoring")
+			continue
+		}
+		data = append(data, &event)
+	}
+	return data, nil
+}
+
+func (r *txs) GetEventsV2(ctx context.Context, txHash string) ([]*model.TxEvents, error) {
+	query := `select
+       txes.message_type,
+       COALESCE(txes.message_type_index, 0),
+       COALESCE(txes.message_event_type, ''),
+       COALESCE(txes.message_event_attr_index, 0),
+       COALESCE(txes.message_event_attr_value, ''),
+       COALESCE(txes.message_event_attr_key, '')
+from public.tx_events_aggregateds as txes
+where txes.tx_hash=$1
+order by txes.message_type_index, txes.message_event_attr_index`
+	rows, err := r.db.Query(ctx, query, txHash)
 	if err != nil {
 		return nil, err
 	}
