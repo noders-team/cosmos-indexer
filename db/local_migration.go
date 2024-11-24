@@ -153,6 +153,12 @@ func (j *localMigrator) Migrate(ctx context.Context) (*mongo.Database, error) {
 		Version:     4,
 		Description: "migrate tx_events to tx_events_vals_aggregated",
 		Up: func(ctx context.Context, db *mongo.Database) error {
+			return j.txEventsValsMigration(ctx)
+		},
+	}, migrate.Migration{
+		Version:     5,
+		Description: "migrate tx_events to tx_events_aggregated",
+		Up: func(ctx context.Context, db *mongo.Database) error {
 			return j.txEventsMigration(ctx)
 		},
 	})
@@ -163,13 +169,34 @@ func (j *localMigrator) Migrate(ctx context.Context) (*mongo.Database, error) {
 	return j.db, nil
 }
 
-func (j *localMigrator) txEventsMigration(ctx context.Context) error {
+func (j *localMigrator) txEventsValsMigration(ctx context.Context) error {
 	_, err := j.pg.Exec(ctx, `INSERT INTO tx_events_vals_aggregateds (ev_attr_value, msg_type, tx_hash, tx_timestamp) (select
                                                    MD5(LOWER(message_event_attributes.value)),
                                                   message_types.message_type,
                                                    txes.hash,
                                                    txes.timestamp
      from txes
+         left join messages on txes.id = messages.tx_id
+         left join message_types on messages.message_type_id = message_types.id
+         left join message_events on messages.id = message_events.message_id
+         left join message_event_types on message_events.message_event_type_id=message_event_types.id
+         left join message_event_attributes on message_events.id = message_event_attributes.message_event_id
+         left join message_event_attribute_keys on message_event_attributes.message_event_attribute_key_id = message_event_attribute_keys.id
+order by messages.message_index, message_events.index, message_event_attributes.index) ON CONFLICT DO NOTHING;`)
+	return err
+}
+
+func (j *localMigrator) txEventsMigration(ctx context.Context) error {
+	_, err := j.pg.Exec(ctx, `INSERT INTO tx_events_aggregateds(tx_hash, message_type, message_type_index, message_event_type, message_event_attr_index, message_event_attr_value, message_event_attr_key)
+(select
+     txes.hash,
+    message_types.message_type,
+    COALESCE(message_events.index, 0),
+    message_event_types.type,
+    COALESCE(message_event_attributes.index, 0),
+    message_event_attributes.value,
+    message_event_attribute_keys.key
+from txes
          left join messages on txes.id = messages.tx_id
          left join message_types on messages.message_type_id = message_types.id
          left join message_events on messages.id = message_events.message_id

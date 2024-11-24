@@ -299,6 +299,7 @@ func migrateTXModels(db *gorm.DB) error {
 		&models.TxResponse{},
 		&models.TxDelegateAggregated{},
 		&models.TxEventsValsAggregated{},
+		&models.TxEventsAggregated{},
 	)
 }
 

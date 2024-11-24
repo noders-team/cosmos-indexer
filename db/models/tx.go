@@ -221,3 +221,14 @@ type TxEventsValsAggregated struct {
 	TxHash      string `gorm:"uniqueIndex:txEventsValsAggregatedIndex"`
 	TxTimestamp time.Time
 }
+
+type TxEventsAggregated struct {
+	ID                    uint
+	TxHash                string `gorm:"uniqueIndex:txEventsAggregatedIndex"`
+	MessageType           string `gorm:"uniqueIndex:txEventsAggregatedIndex"`
+	MessageTypeIndex      int    `gorm:"uniqueIndex:txEventsAggregatedIndex"`
+	MessageEventType      string `gorm:"uniqueIndex:txEventsAggregatedIndex"`
+	MessageEventAttrIndex int    `gorm:"uniqueIndex:txEventsAggregatedIndex"`
+	MessageEventAttrValue string
+	MessageEventAttrKey   string `gorm:"uniqueIndex:txEventsAggregatedIndex"`
+}

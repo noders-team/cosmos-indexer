@@ -776,9 +776,14 @@ func (idxr *Indexer) doDBUpdates(wg *sync.WaitGroup,
 						log.Err(errAggr).Msgf("Failed to save aggregated for tx %s", tx.Hash)
 					}
 
-					errEv := idxr.saveAggregatedEventValues(context.Background(), &tx, events)
+					errEvVals := idxr.saveAggregatedEventValues(context.Background(), &tx, events)
+					if errEvVals != nil {
+						log.Err(errEvVals).Msgf("Failed to save saveAggregatedEventValues for tx %s", tx.Hash)
+					}
+
+					errEv := idxr.saveAggregatedEvents(context.Background(), &tx, events)
 					if errEv != nil {
-						log.Err(errEv).Msgf("Failed to save saveAggregatedEventValues for tx %s", tx.Hash)
+						log.Err(errEv).Msgf("Failed to save saveAggregatedEvents for tx %s", tx.Hash)
 					}
 				}(transaction)
 
@@ -835,6 +840,36 @@ func (idxr *Indexer) saveAggregatedEventValues(ctx context.Context, tx *models.T
 		})
 		if err != nil {
 			log.Err(err).Msgf("error saving aggregated tx_events %v", txEvents)
+		}
+	}
+
+	return nil
+}
+
+func (idxr *Indexer) saveAggregatedEvents(ctx context.Context, tx *models.Tx, events []*model.TxEvents) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	for _, event := range events {
+		var txEvents models.TxEventsAggregated
+
+		txEvents.TxHash = tx.Hash
+		txEvents.MessageType = event.MessageType
+		txEvents.MessageTypeIndex = event.Index
+		txEvents.MessageEventType = event.Type
+		txEvents.MessageEventAttrIndex = event.EventIndex
+		txEvents.MessageEventAttrValue = event.Value
+		txEvents.MessageEventAttrKey = event.Key
+
+		log.Debug().Msgf("trying tosave aggregated saveAggregatedEvents %v", txEvents)
+		err := idxr.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			return tx.Clauses(clause.OnConflict{
+				DoNothing: true,
+			}).Create(&txEvents).Error
+		})
+		if err != nil {
+			log.Err(err).Msgf("error saving aggregated saveAggregatedEvents %v", txEvents)
 		}
 	}
 
