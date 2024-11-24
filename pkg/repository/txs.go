@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"crypto/md5"
 	"errors"
 	"fmt"
 	"regexp"
@@ -56,6 +57,7 @@ type Txs interface {
 type TxsFilter struct {
 	TxHash        *string
 	TxBlockHeight *int64
+	TxHashes      []string
 }
 
 type txs struct {
@@ -330,6 +332,8 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 			dialect = dialect.Where(goqu.I("blocks.height").Eq(*filter.TxBlockHeight))
 		} else if filter.TxHash != nil && len(*filter.TxHash) > 0 {
 			dialect = dialect.Where(goqu.I("hash").Eq(*filter.TxHash))
+		} else if len(filter.TxHashes) > 0 {
+			dialect = dialect.Where(goqu.I("hash").In(filter.TxHashes))
 		}
 	}
 
@@ -859,18 +863,54 @@ func (r *txs) transactionsByEventValuePrepare(values []string, messageType []str
 	return query, args
 }
 
+func (r *txs) transactionsByEventValuePrepareV2(values []string, messageType []string,
+	limit int64, offset int64,
+) (string, []any) {
+	params := 4
+	placeholders := make([]string, len(values))
+	for i := range values {
+		placeholders[i] = fmt.Sprintf("$%d", i+params+1)
+	}
+	inClause := strings.Join(placeholders, ", ")
+
+	query := fmt.Sprintf(`
+		SELECT DISTINCT txes.tx_hash, txes.tx_timestamp
+		FROM tx_events_vals_aggregateds as txes
+		WHERE txes.msg_type = ANY($1)
+		AND txes.ev_attr_value IN (%s)
+		GROUP BY txes.id, txes.tx_hash, txes.tx_timestamp
+		HAVING COUNT(DISTINCT txes.ev_attr_value) = $2::integer
+		ORDER BY txes.tx_timestamp DESC
+		LIMIT $3::integer OFFSET $4::integer;`, inClause)
+
+	args := make([]interface{}, len(values)+params)
+	args[0] = messageType
+	args[1] = len(values)
+	args[2] = limit
+	args[3] = offset
+	for i, v := range values {
+		args[i+params] = fmt.Sprintf("%x", md5.Sum([]byte(strings.ToLower(v))))
+	}
+
+	return query, args
+}
+
 func (r *txs) TransactionsByEventValue(ctx context.Context, values []string, messageType []string, includeEvents bool,
 	limit int64, offset int64,
 ) ([]*models.Tx, int64, error) {
-	query, args := r.transactionsByEventValuePrepare(values, messageType, limit, offset)
+	startTime := time.Now()
+	log.Debug().Msgf("=> start TransactionsByEventValue %s", startTime.String())
+
+	query, args := r.transactionsByEventValuePrepareV2(values, messageType, limit, offset)
 
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, 0, err
 	}
 	defer rows.Close()
+	log.Debug().Msgf("=> TransactionsByEventValue done in: %s", time.Since(startTime).String())
 
-	data := make([]*models.Tx, 0)
+	txHashes := make([]string, 0)
 	for rows.Next() {
 		var txHash string
 		var txTime time.Time
@@ -878,23 +918,25 @@ func (r *txs) TransactionsByEventValue(ctx context.Context, values []string, mes
 			log.Err(err).Msgf("error scanning row")
 			continue
 		}
-
-		txByHash, _, err := r.Transactions(ctx, 1, 0, &TxsFilter{TxHash: &txHash})
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, 0, err
-		}
-
-		if includeEvents {
-			for _, tx := range txByHash {
-				events, err := r.GetEvents(ctx, tx.ID)
-				if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-					return nil, 0, err
-				}
-				tx.Events = events
-			}
-		}
-		data = append(data, txByHash...)
+		txHashes = append(txHashes, txHash)
 	}
+
+	data, _, err := r.Transactions(ctx, limit, 0, &TxsFilter{TxHashes: txHashes})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, 0, err
+	}
+
+	for _, tx := range data {
+		if includeEvents {
+			events, err := r.GetEvents(ctx, tx.ID)
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return nil, 0, err
+			}
+			tx.Events = events
+		}
+	}
+
+	log.Debug().Msgf("=> TransactionsByEventValue after loop in: %s", time.Since(startTime).String())
 
 	// calculating total count
 	params := 2
@@ -926,15 +968,17 @@ func (r *txs) TransactionsByEventValue(ctx context.Context, values []string, mes
 		return nil, 0, err
 	}
 
+	log.Info().Msgf("=> TransactionsByEventValue after totals in: %s", time.Since(startTime).String())
+
 	return data, total, nil
 }
 
 func (r *txs) GetEvents(ctx context.Context, txID uint) ([]*model.TxEvents, error) {
 	query := `select
        message_types.message_type,
-       message_events.index,
+       COALESCE(message_events.index, 0),
        message_event_types.type,
-       message_event_attributes.index,
+       COALESCE(message_event_attributes.index, 0),
        message_event_attributes.value,
        message_event_attribute_keys.key
 from txes
@@ -945,7 +989,7 @@ from txes
          left join message_event_attributes on message_events.id = message_event_attributes.message_event_id
          left join message_event_attribute_keys on message_event_attributes.message_event_attribute_key_id = message_event_attribute_keys.id
 where txes.id=$1
-order by messages.message_index, message_events.index, message_event_attributes.index asc`
+order by messages.message_index, message_events.index, message_event_attributes.index`
 	rows, err := r.db.Query(ctx, query, txID)
 	if err != nil {
 		return nil, err
@@ -956,7 +1000,8 @@ order by messages.message_index, message_events.index, message_event_attributes.
 	for rows.Next() {
 		var event model.TxEvents
 		if err = rows.Scan(&event.MessageType, &event.EventIndex, &event.Type, &event.Index, &event.Value, &event.Key); err != nil {
-			return nil, err
+			log.Err(err).Msgf("error scanning row in GetEvents, ignoring")
+			continue
 		}
 		data = append(data, &event)
 	}
