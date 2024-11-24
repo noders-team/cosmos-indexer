@@ -926,6 +926,8 @@ func (r *txs) TransactionsByEventValue(ctx context.Context, values []string, mes
 		return nil, 0, err
 	}
 
+	log.Info().Msgf("=> TransactionsByEventValue before loop in: %s", time.Since(startTime).String())
+
 	for _, tx := range data {
 		if includeEvents {
 			events, err := r.GetEvents(ctx, tx.ID)
