@@ -29,6 +29,7 @@ type Txs interface {
 	TransactionSigners(ctx context.Context, hash string) ([]*models.SignerInfo, error)
 	Messages(ctx context.Context, hash string) ([]*models.Message, error)
 	GetSenderAndReceiver(ctx context.Context, hash string) (*model.TxSenderReceiver, error)
+	GetSenderAndReceiverV2(ctx context.Context, hash string) (*model.TxSenderReceiver, error)
 	GetWalletsCount(ctx context.Context) (*model.TotalWallets, error)
 	ChartTransactionsByHour(ctx context.Context, to time.Time) (*model.TxByHourWithCount, error)
 	ChartTransactionsVolume(ctx context.Context, to time.Time) ([]*model.TxVolumeByHour, error)
@@ -402,7 +403,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 			tx.AuthInfo = authInfo
 			tx.TxResponse = txResponse
 
-			res, err := r.GetSenderAndReceiver(context.Background(), tx.Hash)
+			res, err := r.GetSenderAndReceiverV2(context.Background(), tx.Hash)
 			if err == nil {
 				tx.SenderReceiver = res
 			}
@@ -541,6 +542,55 @@ func (r *txs) GetSenderAndReceiver(ctx context.Context, hash string) (*model.TxS
 		   where txes.hash = $1
 		   and message_event_types.type = ANY($2)
 	order by messages.message_index, message_events.index, message_event_attributes.index asc`
+	types := []string{"transfer", "fungible_token_packet", "delegate", "coin_received", "coin_spent"}
+	rows, err := r.db.Query(ctx, query, hash, types)
+	if err != nil {
+		log.Err(err).Msgf("GetSenderAndReceiver: rows error")
+		return nil, err
+	}
+
+	res := &model.TxSenderReceiver{}
+	for rows.Next() {
+		var messageType string
+		var key string
+		var value string
+		if err := rows.Scan(&messageType, &value, &key); err != nil {
+			return nil, err
+		}
+		if res.MessageType == "" {
+			res.MessageType = messageType
+		}
+
+		if strings.EqualFold(key, "sender") || strings.EqualFold(key, "spender") {
+			res.Sender = value
+		}
+
+		if strings.EqualFold(key, "recipient") || strings.EqualFold(key, "receiver") {
+			res.Receiver = value
+		}
+
+		if strings.EqualFold(key, "amount") {
+			amount, denom, err := r.ExtractNumber(value)
+			if err != nil {
+				log.Err(err).Msgf("GetSenderAndReceiver: extractNumber error")
+				res.Amount = value
+			} else {
+				res.Amount = amount.String()
+				res.Denom = denom
+			}
+		}
+	}
+	return res, nil
+}
+
+func (r *txs) GetSenderAndReceiverV2(ctx context.Context, hash string) (*model.TxSenderReceiver, error) {
+	query := `select
+		   txes.message_type,
+		   txes.message_event_attr_value,
+		   txes.message_event_attr_key
+	from tx_events_aggregateds as txes where txes.tx_hash = $1
+		   and txes.message_event_attr_key = ANY($2)
+	order by txes.message_type_index, txes.message_event_attr_index asc`
 	types := []string{"transfer", "fungible_token_packet", "delegate", "coin_received", "coin_spent"}
 	rows, err := r.db.Query(ctx, query, hash, types)
 	if err != nil {
@@ -896,6 +946,38 @@ func (r *txs) transactionsByEventValuePrepareV2(values []string, messageType []s
 	return query, args
 }
 
+func (r *txs) transactionsByEventValueTotals(ctx context.Context,
+	values []string, messageType []string,
+) (int64, error) {
+	params := 2
+	placeholders := make([]string, len(values))
+	for i := range values {
+		placeholders[i] = fmt.Sprintf("$%d", i+params+1)
+	}
+	inClause := strings.Join(placeholders, ", ")
+
+	queryAll := fmt.Sprintf(`
+			SELECT COUNT(DISTINCT txes.tx_hash)
+			FROM tx_events_vals_aggregateds as txes
+			WHERE txes.msg_type = ANY($1)
+			AND txes.ev_attr_value IN (%s)
+			HAVING COUNT(DISTINCT txes.ev_attr_value) = $2::integer`, inClause)
+
+	args := make([]interface{}, len(values)+params)
+	args[0] = messageType
+	args[1] = len(values)
+	for i, v := range values {
+		args[i+params] = fmt.Sprintf("%x", md5.Sum([]byte(strings.ToLower(v))))
+	}
+
+	var total int64
+	if err := r.db.QueryRow(ctx, queryAll, args...).Scan(&total); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return 0, err
+	}
+
+	return total, nil
+}
+
 func (r *txs) TransactionsByEventValue(ctx context.Context, values []string, messageType []string, includeEvents bool,
 	limit int64, offset int64,
 ) ([]*models.Tx, int64, error) {
@@ -942,32 +1024,8 @@ func (r *txs) TransactionsByEventValue(ctx context.Context, values []string, mes
 	log.Info().Msgf("=> TransactionsByEventValue after loop in: %s", time.Since(startTime).String())
 
 	// calculating total count
-	params := 2
-	placeholders := make([]string, len(values))
-	for i := range values {
-		placeholders[i] = fmt.Sprintf("$%d", i+params+1)
-	}
-	inClause := strings.Join(placeholders, ", ")
-
-	queryAll := fmt.Sprintf(`SELECT COUNT(DISTINCT txes.hash)
-		FROM txes
-		LEFT JOIN messages ON txes.id = messages.tx_id
-		LEFT JOIN message_types ON messages.message_type_id = message_types.id
-		LEFT JOIN message_events ON messages.id = message_events.message_id
-		LEFT JOIN message_event_attributes ON message_events.id = message_event_attributes.message_event_id
-		WHERE message_types.message_type = ANY($1)
-		AND message_event_attributes.value IN (%s)
-		HAVING COUNT(DISTINCT message_event_attributes.value) = $2::integer`, inClause)
-
-	args = make([]interface{}, len(values)+params)
-	args[0] = messageType
-	args[1] = len(values)
-	for i, v := range values {
-		args[i+params] = v
-	}
-
-	var total int64
-	if err = r.db.QueryRow(ctx, queryAll, args...).Scan(&total); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	total, err := r.transactionsByEventValueTotals(ctx, values, messageType)
+	if err != nil {
 		return nil, 0, err
 	}
 
