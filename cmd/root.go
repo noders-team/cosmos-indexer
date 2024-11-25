@@ -112,8 +112,8 @@ func connectToDBAndMigrate(dbConfig config.Database) (*gorm.DB, error) {
 	}
 
 	sqldb, _ := database.DB()
-	sqldb.SetMaxIdleConns(10)
-	sqldb.SetMaxOpenConns(100)
+	sqldb.SetMaxIdleConns(1_000_000)
+	sqldb.SetMaxOpenConns(1_000_000)
 	sqldb.SetConnMaxLifetime(time.Hour)
 
 	err = db.MigrateModels(database)
