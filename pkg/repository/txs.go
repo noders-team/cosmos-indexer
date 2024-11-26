@@ -436,7 +436,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 		}
 	}
 
-	startTime := time.Now()
+	startTime = time.Now()
 	log.Info().Msgf("=> TransactionsByEventValue ==> transaction total: %s", startTime.String())
 
 	var row pgx.Row
