@@ -384,6 +384,9 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 			tx.ExtensionOptions = extensionsOptions
 			tx.NonCriticalExtensionOptions = nonCriticalExtensionOptions
 
+			startTime := time.Now()
+			log.Info().Msgf("=> TransactionsByEventValue ==> transaction loop start: %s", startTime.String())
+
 			var block *models.Block
 			if block, err = r.blockInfo(ctx, tx.BlockID); err != nil {
 				log.Err(err).Msgf("error in blockInfo")
@@ -391,22 +394,28 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 			if block != nil {
 				tx.Block = *block
 			}
+			log.Info().Msgf("=> TransactionsByEventValue ==> transaction loop block: %s", time.Since(startTime).String())
 
+			startTime = time.Now()
 			var fees []models.Fee
 			if fees, err = r.feesByTransaction(ctx, tx.ID); err != nil {
 				log.Err(err).Msgf("error in feesByTransaction")
 			}
 			tx.Fees = fees
+			log.Info().Msgf("=> TransactionsByEventValue ==> transaction loop fees: %s", time.Since(startTime).String())
 
 			authInfo.Fee = authInfoFee
 			authInfo.Tip = authInfoTip
+
 			tx.AuthInfo = authInfo
 			tx.TxResponse = txResponse
 
+			startTime = time.Now()
 			res, err := r.GetSenderAndReceiverV2(context.Background(), tx.Hash)
 			if err == nil {
 				tx.SenderReceiver = res
 			}
+			log.Info().Msgf("=> TransactionsByEventValue ==> transaction loop GetSenderAndReceiverV2: %s", time.Since(startTime).String())
 
 			result = append(result, &tx)
 		}
