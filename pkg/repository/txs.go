@@ -329,13 +329,15 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 			goqu.On(goqu.Ex{"txes.block_id": goqu.I("blocks.id")}),
 		)
 
+	log.Info().Msgf("=> Transactions ==> filter.TxHashes: %~v", filter)
 	if filter != nil {
 		if filter.TxBlockHeight != nil {
 			dialect = dialect.Where(goqu.I("blocks.height").Eq(*filter.TxBlockHeight))
 		} else if filter.TxHash != nil && len(*filter.TxHash) > 0 {
-			dialect = dialect.Where(goqu.I("hash").Eq(*filter.TxHash))
+			dialect = dialect.Where(goqu.I("txes.hash").Eq(*filter.TxHash))
 		} else if len(filter.TxHashes) > 0 {
-			dialect = dialect.Where(goqu.I("hash").In(filter.TxHashes))
+			log.Info().Msgf("=> Transactions ==> filter.TxHashes: %v", filter.TxHashes)
+			dialect = dialect.Where(goqu.I("txes.hash").In(filter.TxHashes))
 		}
 	}
 
@@ -1020,6 +1022,10 @@ func (r *txs) TransactionsByEventValue(ctx context.Context, values []string, mes
 			continue
 		}
 		txHashes = append(txHashes, txHash)
+	}
+
+	if len(txHashes) == 0 {
+		return nil, 0, nil
 	}
 
 	data, _, err := r.Transactions(ctx, limit, 0, &TxsFilter{TxHashes: txHashes})
