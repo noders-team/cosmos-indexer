@@ -431,6 +431,9 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 		}
 	}
 
+	startTime := time.Now()
+	log.Info().Msgf("=> TransactionsByEventValue ==> transaction total: %s", startTime.String())
+
 	var row pgx.Row
 	if blockID >= 0 {
 		queryAll := `select count(*) from txes where txes.block_id = $1`
@@ -445,6 +448,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 		log.Err(err).Msgf("queryAll error")
 		return nil, 0, err
 	}
+	log.Info().Msgf("=> TransactionsByEventValue ==> transaction total finish: %s", time.Since(startTime).String())
 
 	return result, allTx, nil
 }
