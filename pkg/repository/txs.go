@@ -349,11 +349,16 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 		return nil, 0, err
 	}
 
+	log.Info().Msgf("=> Transactions ==> query: %s", query)
+
+	startTime := time.Now()
+	log.Info().Msgf("=> TransactionsByEventValue ==> transaction main start: %s", startTime.String())
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		log.Err(err).Msgf("Transactions Query error")
 		return nil, 0, err
 	}
+	log.Info().Msgf("=> TransactionsByEventValue ==> transaction main finish: %s", time.Since(startTime).String())
 
 	result := make([]*models.Tx, 0)
 	if rows != nil {
