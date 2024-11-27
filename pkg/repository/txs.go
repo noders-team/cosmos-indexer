@@ -54,6 +54,7 @@ type Txs interface {
 		limit int64, offset int64) (data []*models.Tx, totalSum *model.Denom, all int64, err error)
 	ProposalDepositors(ctx context.Context, proposalID int,
 		sortBy *model.SortBy, limit int64, offset int64) ([]*model.ProposalDeposit, int64, error)
+	TotalRewardByAccount(ctx context.Context, account string) ([]*model.DecCoin, error)
 }
 
 type TxsFilter struct {
@@ -342,7 +343,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 	}
 
 	dialect = dialect.
-		Order(goqu.I("blocks.height").Desc(), goqu.I("txes.timestamp").Desc()).
+		Order(goqu.I("txes.timestamp").Desc()).
 		Limit(uint(limit)).Offset(uint(offset))
 
 	query, args, err := dialect.ToSQL()
@@ -351,16 +352,16 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 		return nil, 0, err
 	}
 
-	log.Info().Msgf("=> Transactions ==> query: %s", query)
+	log.Debug().Msgf("=> Transactions ==> query: %s", query)
 
 	startTime := time.Now()
-	log.Info().Msgf("=> TransactionsByEventValue ==> transaction main start: %s", startTime.String())
+	log.Debug().Msgf("=> TransactionsByEventValue ==> transaction main start: %s", startTime.String())
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		log.Err(err).Msgf("Transactions Query error")
 		return nil, 0, err
 	}
-	log.Info().Msgf("=> TransactionsByEventValue ==> transaction main finish: %s", time.Since(startTime).String())
+	log.Debug().Msgf("=> TransactionsByEventValue ==> transaction main finish: %s", time.Since(startTime).String())
 
 	result := make([]*models.Tx, 0)
 	if rows != nil {
@@ -392,7 +393,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 			tx.NonCriticalExtensionOptions = nonCriticalExtensionOptions
 
 			startTime := time.Now()
-			log.Info().Msgf("=> TransactionsByEventValue ==> transaction loop start: %s", startTime.String())
+			log.Debug().Msgf("=> TransactionsByEventValue ==> transaction loop start: %s", startTime.String())
 
 			var block *models.Block
 			if block, err = r.blockInfo(ctx, tx.BlockID); err != nil {
@@ -401,7 +402,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 			if block != nil {
 				tx.Block = *block
 			}
-			log.Info().Msgf("=> TransactionsByEventValue ==> transaction loop block: %s", time.Since(startTime).String())
+			log.Debug().Msgf("=> TransactionsByEventValue ==> transaction loop block: %s", time.Since(startTime).String())
 
 			startTime = time.Now()
 			var fees []models.Fee
@@ -409,7 +410,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 				log.Err(err).Msgf("error in feesByTransaction")
 			}
 			tx.Fees = fees
-			log.Info().Msgf("=> TransactionsByEventValue ==> transaction loop fees: %s", time.Since(startTime).String())
+			log.Debug().Msgf("=> TransactionsByEventValue ==> transaction loop fees: %s", time.Since(startTime).String())
 
 			authInfo.Fee = authInfoFee
 			authInfo.Tip = authInfoTip
@@ -422,7 +423,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 			if err == nil {
 				tx.SenderReceiver = res
 			}
-			log.Info().Msgf("=> TransactionsByEventValue ==> transaction loop GetSenderAndReceiverV2: %s", time.Since(startTime).String())
+			log.Debug().Msgf("=> TransactionsByEventValue ==> transaction loop GetSenderAndReceiverV2: %s", time.Since(startTime).String())
 
 			result = append(result, &tx)
 		}
@@ -439,7 +440,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 	}
 
 	startTime = time.Now()
-	log.Info().Msgf("=> TransactionsByEventValue ==> transaction total: %s", startTime.String())
+	log.Debug().Msgf("=> TransactionsByEventValue ==> transaction total: %s", startTime.String())
 
 	var row pgx.Row
 	if blockID >= 0 {
@@ -455,7 +456,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 		log.Err(err).Msgf("queryAll error")
 		return nil, 0, err
 	}
-	log.Info().Msgf("=> TransactionsByEventValue ==> transaction total finish: %s", time.Since(startTime).String())
+	log.Debug().Msgf("=> TransactionsByEventValue ==> transaction total finish: %s", time.Since(startTime).String())
 
 	return result, allTx, nil
 }
@@ -1403,4 +1404,37 @@ func (r *txs) ProposalDepositors(ctx context.Context, proposalID int,
 	}
 
 	return data, all, nil
+}
+
+func (r *txs) TotalRewardByAccount(ctx context.Context, account string) ([]*model.DecCoin, error) {
+	query := `SELECT
+			SUBSTRING(tx_events_aggregateds.message_event_attr_value FROM '[a-zA-Z]+') AS denom,
+			SUM(SUBSTRING(tx_events_aggregateds.message_event_attr_value FROM '[0-9]+')::INTEGER) AS amount
+		FROM tx_events_aggregateds
+		WHERE tx_events_aggregateds.tx_hash IN (
+			SELECT DISTINCT tx_events_aggregateds.tx_hash
+			FROM tx_events_aggregateds
+			WHERE tx_events_aggregateds.message_type = '/cosmos.distribution.v1beta1.MsgWithdrawDelegatorReward'
+			AND tx_events_aggregateds.message_event_type = 'transfer'
+			AND tx_events_aggregateds.message_event_attr_key = 'recipient'
+			AND tx_events_aggregateds.message_event_attr_value = $1
+			) AND tx_events_aggregateds.message_event_attr_key = 'amount'
+		GROUP BY denom;`
+	rows, err := r.db.Query(ctx, query, account)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	data := make([]*model.DecCoin, 0)
+	for rows.Next() {
+		var denom model.DecCoin
+		var amount int64
+		if err = rows.Scan(&denom.Denom, &amount); err != nil {
+			return nil, err
+		}
+		denom.Amount = decimal.NewFromInt(amount)
+		data = append(data, &denom)
+	}
+	return data, nil
 }

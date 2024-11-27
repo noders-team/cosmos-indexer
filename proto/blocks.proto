@@ -39,6 +39,7 @@ service BlocksService {
   rpc AccountInfo(AccountInfoRequest) returns (AccountInfoResponse) {}
   rpc DelegatesByValidator(DelegatesByValidatorRequest) returns (DelegatesByValidatorResponse) {}
   rpc ProposalDepositors(ProposalDepositorsRequest) returns (ProposalDepositorsResponse) {}
+  rpc RewardByAccount(RewardByAccountRequest) returns (RewardByAccountResponse) {}
 }
 
 
@@ -517,4 +518,12 @@ message ProposalDepositorsRequest{
 message ProposalDepositorsResponse{
   repeated ProposalDeposit data=1;
   Result result = 2;
+}
+
+message RewardByAccountRequest{
+  string account = 1;
+}
+
+message RewardByAccountResponse{
+  repeated Denom amount = 1;
 }

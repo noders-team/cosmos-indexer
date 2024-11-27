@@ -47,6 +47,7 @@ type Txs interface {
 		limit int64, offset int64) (data []*models.Tx, totalSum *model.Denom, all int64, err error)
 	ProposalDepositors(ctx context.Context, proposalID int,
 		sortBy *model.SortBy, limit int64, offset int64) ([]*model.ProposalDeposit, int64, error)
+	TotalRewardByAccount(ctx context.Context, account string) ([]*model.DecCoin, error)
 }
 
 type txs struct {
@@ -203,4 +204,8 @@ func (s *txs) ProposalDepositors(ctx context.Context, proposalID int,
 	sortBy *model.SortBy, limit int64, offset int64,
 ) ([]*model.ProposalDeposit, int64, error) {
 	return s.txRepo.ProposalDepositors(ctx, proposalID, sortBy, limit, offset)
+}
+
+func (s *txs) TotalRewardByAccount(ctx context.Context, account string) ([]*model.DecCoin, error) {
+	return s.txRepo.TotalRewardByAccount(ctx, account)
 }

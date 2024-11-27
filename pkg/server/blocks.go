@@ -774,3 +774,20 @@ func (r *blocksServer) ProposalDepositors(ctx context.Context,
 		},
 	}, nil
 }
+
+func (r *blocksServer) RewardByAccount(ctx context.Context, in *pb.RewardByAccountRequest) (*pb.RewardByAccountResponse, error) {
+	res, err := r.srvTx.TotalRewardByAccount(ctx, in.Account)
+	if err != nil {
+		return nil, err
+	}
+
+	data := make([]*pb.Denom, 0)
+	for _, reward := range res {
+		data = append(data, &pb.Denom{
+			Denom:  reward.Denom,
+			Amount: reward.Amount.String(),
+		})
+	}
+
+	return &pb.RewardByAccountResponse{Amount: data}, nil
+}
