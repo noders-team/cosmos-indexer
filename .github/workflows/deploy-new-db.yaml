@@ -31,7 +31,7 @@ jobs:
 
     strategy:
       matrix:
-        environment: [ 'zetachain-prod' ]
+        environment: [ 'nillion-testnet-prod' ]
       fail-fast: false
 
     environment: ${{ matrix.environment }}

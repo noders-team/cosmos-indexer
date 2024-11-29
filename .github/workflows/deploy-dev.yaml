@@ -1,4 +1,4 @@
-name: Build and Deploy Cosmos-Indexer Docker Image
+name: Deploy Indexer - DEV
 
 on:
   workflow_dispatch:
