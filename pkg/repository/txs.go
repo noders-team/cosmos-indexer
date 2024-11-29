@@ -610,8 +610,8 @@ func (r *txs) GetSenderAndReceiverV2(ctx context.Context, hash string) (*model.T
 		   txes.message_event_attr_value,
 		   txes.message_event_attr_key
 	from tx_events_aggregateds as txes where txes.tx_hash = $1
-		   and txes.message_event_attr_key = ANY($2)
-	order by txes.message_type_index, txes.message_event_attr_index asc`
+		   and txes.message_event_type = ANY($2)
+	order by txes.message_type_index, txes.message_event_attr_index`
 	types := []string{"transfer", "fungible_token_packet", "delegate", "coin_received", "coin_spent"}
 	rows, err := r.db.Query(ctx, query, hash, types)
 	if err != nil {
