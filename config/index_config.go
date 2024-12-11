@@ -11,7 +11,7 @@ import (
 type IndexConfig struct {
 	Database           Database
 	ConfigFileLocation string
-	Base               indexBase
+	Base               IndexBase
 	Log                log
 	Probe              Probe
 	Flags              flags
@@ -20,25 +20,28 @@ type IndexConfig struct {
 	MongoConf          MongoConf
 }
 
-type indexBase struct {
+type IndexBase struct {
 	throttlingBase
-	retryBase
-	ReindexMessageType         string `mapstructure:"reindex-message-type"`
-	ReattemptFailedBlocks      bool   `mapstructure:"reattempt-failed-blocks"`
-	GenesisIndex               bool   `mapstructure:"genesis-index"`
-	GenesisBlocksStep          int64  `mapstructure:"genesis-blocks-step"`
-	StartBlock                 int64  `mapstructure:"start-block"`
-	EndBlock                   int64  `mapstructure:"end-block"`
-	BlockInputFile             string `mapstructure:"block-input-file"`
-	ReIndex                    bool   `mapstructure:"reindex"`
-	RPCWorkers                 int64  `mapstructure:"rpc-workers"`
-	BlockTimer                 int64  `mapstructure:"block-timer"`
-	WaitForChain               bool   `mapstructure:"wait-for-chain"`
-	WaitForChainDelay          int64  `mapstructure:"wait-for-chain-delay"`
-	TransactionIndexingEnabled bool   `mapstructure:"index-transactions"`
-	ExitWhenCaughtUp           bool   `mapstructure:"exit-when-caught-up"`
-	BlockEventIndexingEnabled  bool   `mapstructure:"index-block-events"`
-	FilterFile                 string `mapstructure:"filter-file"`
+	RetryBase
+	Mode                       string    `mapstructure:"mode"`
+	ModeTopics                 *[]string `mapstructure:"mode-storage-topics"`
+	ModeCoolDownMins           int       `mapstructure:"mode-cooldown-mins"`
+	ModeCoolDownCount          int       `mapstructure:"mode-cooldown-count"`
+	ModeBlocksStep             int64     `mapstructure:"mode-blocks-step"`
+	ReindexMessageType         string    `mapstructure:"reindex-message-type"`
+	ReattemptFailedBlocks      bool      `mapstructure:"reattempt-failed-blocks"`
+	StartBlock                 int64     `mapstructure:"start-block"`
+	EndBlock                   int64     `mapstructure:"end-block"`
+	BlockInputFile             string    `mapstructure:"block-input-file"`
+	ReIndex                    bool      `mapstructure:"reindex"`
+	RPCWorkers                 int64     `mapstructure:"rpc-workers"`
+	BlockTimer                 int64     `mapstructure:"block-timer"`
+	WaitForChain               bool      `mapstructure:"wait-for-chain"`
+	WaitForChainDelay          int64     `mapstructure:"wait-for-chain-delay"`
+	TransactionIndexingEnabled bool      `mapstructure:"index-transactions"`
+	ExitWhenCaughtUp           bool      `mapstructure:"exit-when-caught-up"`
+	BlockEventIndexingEnabled  bool      `mapstructure:"index-block-events"`
+	FilterFile                 string    `mapstructure:"filter-file"`
 }
 
 // Flags for specific, deeper indexing behavior
@@ -60,8 +63,7 @@ func SetupIndexSpecificFlags(conf *IndexConfig, cmd *cobra.Command) {
 	// filter configs
 	cmd.PersistentFlags().StringVar(&conf.Base.FilterFile, "base.filter-file", "", "path to a file containing a JSON config of block event and message type filters to apply to beginblocker events, endblocker events and TX messages")
 	// other base setting
-	cmd.PersistentFlags().BoolVar(&conf.Base.GenesisIndex, "base.genesis-index", false, "index chain from genesis block")
-	cmd.PersistentFlags().Int64Var(&conf.Base.GenesisBlocksStep, "base.genesis-blocks-step", 5000, "block gap for genesis threads")
+	cmd.PersistentFlags().Int64Var(&conf.Base.ModeBlocksStep, "base.mode-blocks-step", 5000, "block gap for genesis threads")
 
 	cmd.PersistentFlags().Int64Var(&conf.Base.RPCWorkers, "base.rpc-workers", 1, "rpc workers")
 	cmd.PersistentFlags().BoolVar(&conf.Base.WaitForChain, "base.wait-for-chain", false, "wait for chain to be in sync?")
@@ -73,6 +75,12 @@ func SetupIndexSpecificFlags(conf *IndexConfig, cmd *cobra.Command) {
 
 	// flags
 	cmd.PersistentFlags().BoolVar(&conf.Flags.IndexTxMessageRaw, "flags.index-tx-message-raw", false, "if true, this will index the raw message bytes. This will significantly increase the size of the database.")
+	// run-mode
+	cmd.PersistentFlags().StringVar(&conf.Base.Mode, "base.mode", "normal", "running mode, can be normal(default), fetcher or storage")
+	conf.Base.ModeTopics = cmd.PersistentFlags().StringArray("base.mode-topics", []string{""}, "topic for fetcher and storage modes")
+	cmd.PersistentFlags().IntVar(&conf.Base.ModeCoolDownMins, "base.mode-cooldown-mins", 5, "cool down period for mode fetcher")
+	cmd.PersistentFlags().IntVar(&conf.Base.ModeCoolDownCount, "base.mode-cooldown-count", 5000, "cool down count for mode fetcher")
+	cmd.PersistentFlags().StringVar(&conf.ConfigFileLocation, "config-file", "", "config file location")
 }
 
 func (conf *IndexConfig) Validate() error {
@@ -127,7 +135,7 @@ func CheckSuperfluousIndexKeys(keys []string) []string {
 	addProbeConfigKeys(validKeys)
 
 	// add base keys
-	for _, key := range getValidConfigKeys(indexBase{}, "base") {
+	for _, key := range getValidConfigKeys(IndexBase{}, "base") {
 		validKeys[key] = struct{}{}
 	}
 
@@ -135,7 +143,7 @@ func CheckSuperfluousIndexKeys(keys []string) []string {
 		validKeys[key] = struct{}{}
 	}
 
-	for _, key := range getValidConfigKeys(retryBase{}, "base") {
+	for _, key := range getValidConfigKeys(RetryBase{}, "base") {
 		validKeys[key] = struct{}{}
 	}
 

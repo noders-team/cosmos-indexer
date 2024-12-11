@@ -51,7 +51,7 @@ type throttlingBase struct {
 	Throttling float64 `mapstructure:"throttling"`
 }
 
-type retryBase struct {
+type RetryBase struct {
 	RequestRetryAttempts int64  `mapstructure:"request-retry-attempts"`
 	RequestRetryMaxWait  uint64 `mapstructure:"request-retry-max-wait"`
 }

@@ -228,7 +228,7 @@ void runApplication() {
               --base.throttling 2.005 \
               --base.rpc-workers 10 \
               --base.index-transactions true \
-              --base.index-block-events true \
+              --base.index-block-events false \
               --probe.rpc ${env.probeRpc} \
               --probe.account-prefix ${env.probeAccountPrefix} \
               --probe.chain-id ${env.probeChainID} \
