@@ -21,6 +21,7 @@ type Blocks interface {
 	GetBlockValidators(ctx context.Context, block int32) ([]string, error)
 	TotalBlocks(ctx context.Context, to time.Time) (*model.TotalBlocks, error)
 	Blocks(ctx context.Context, limit int64, offset int64) ([]*model.BlockInfo, int64, error)
+	LatestBlockHeight(ctx context.Context) (int64, error)
 	BlockSignatures(ctx context.Context, height int64, valAddress []string,
 		limit int64, offset int64) ([]*model.BlockSigners, int64, error)
 	BlockUptime(ctx context.Context, blockWindow, height int64,
@@ -167,6 +168,16 @@ func (r *blocks) GetBlockValidators(ctx context.Context, block int32) ([]string,
 	return data, nil
 }
 
+func (r *blocks) LatestBlockHeight(ctx context.Context) (int64, error) {
+	query := `select blocks.height from blocks order by blocks.height desc limit 1`
+	row := r.db.QueryRow(ctx, query)
+	var blockHeight int64
+	if err := row.Scan(&blockHeight); err != nil {
+		return 0, err
+	}
+	return blockHeight, nil
+}
+
 func (r *blocks) TotalBlocks(ctx context.Context, to time.Time) (*model.TotalBlocks, error) {
 	query := `select blocks.height from blocks order by blocks.height desc limit 1`
 	row := r.db.QueryRow(ctx, query)
@@ -275,9 +286,8 @@ func (r *blocks) blocksCount(ctx context.Context, from, to time.Time) (int64, er
 }
 
 func (r *blocks) Blocks(ctx context.Context, limit int64, offset int64) ([]*model.BlockInfo, int64, error) {
-	query := `select blocks.id, blocks.height, blocks.block_hash, addresses.address as proposer, count(txes), blocks.time_stamp from blocks
+	query := `select blocks.id, blocks.height, blocks.block_hash, addresses.address as proposer, blocks.time_stamp from blocks
 		left join addresses on blocks.proposer_cons_address_id = addresses.id
-		left join txes on blocks.id = txes.block_id
 		group by blocks.id, blocks.height, blocks.block_hash, addresses.address, blocks.time_stamp
 		order by blocks.height desc
 		limit $1 offset $2`
@@ -292,14 +302,9 @@ func (r *blocks) Blocks(ctx context.Context, limit int64, offset int64) ([]*mode
 		var in model.BlockInfo
 		blockID := 0
 		errScan := rows.Scan(&blockID, &in.BlockHeight,
-			&in.BlockHash, &in.ProposedValidatorAddress, &in.TotalTx, &in.GenerationTime)
+			&in.BlockHash, &in.ProposedValidatorAddress, &in.GenerationTime)
 		if errScan != nil {
 			return nil, 0, fmt.Errorf("repository.Blocks, Scan: %v", errScan)
-		}
-
-		in.TotalFees, err = r.blockFees(ctx, in.BlockHeight)
-		if err != nil {
-			return nil, 0, err
 		}
 
 		allTx, err := r.countAllTxs(ctx, int64(blockID))
@@ -307,11 +312,6 @@ func (r *blocks) Blocks(ctx context.Context, limit int64, offset int64) ([]*mode
 			return nil, 0, fmt.Errorf("rowQueryTxs.Scan, Scan: %v", errScan)
 		}
 		in.TotalTx = allTx
-
-		in.GasUsed, in.GasWanted, err = r.blockGas(ctx, in.BlockHeight)
-		if err != nil {
-			return nil, 0, err
-		}
 
 		data = append(data, &in)
 	}

@@ -42,6 +42,9 @@ func (s *aggregatesConsumer) Consume(ctx context.Context) error {
 }
 
 func (s *aggregatesConsumer) storeAggregated(ctx context.Context) error {
+	started := time.Now()
+	log.Info().Msgf("started storing aggregated data %s", started.String())
+
 	blocksTotal, err := s.blocks.TotalBlocks(ctx, time.Now().UTC())
 	if err != nil {
 		log.Err(err).Msg("failed to fetch total blocks")
@@ -73,6 +76,8 @@ func (s *aggregatesConsumer) storeAggregated(ctx context.Context) error {
 		Transactions: res,
 		Wallets:      *wallets,
 	}
+
+	log.Info().Msgf("finished storing aggregated data %s, duration: %s", time.Now(), time.Since(started))
 
 	return s.totals.AddTotals(ctx, info)
 }

@@ -384,6 +384,12 @@ func (r *blocksServer) CacheAggregated(ctx context.Context,
 		return &pb.CacheAggregatedResponse{}, err
 	}
 
+	// TODO not the best place
+	lastBlock, err := r.srv.LatestBlockHeight(ctx)
+	if err == nil {
+		info.Blocks.BlockHeight = lastBlock
+	}
+
 	return &pb.CacheAggregatedResponse{
 		Transactions: r.toTotalTransactionsProto(&info.Transactions),
 		Blocks:       r.toTotalBlocksProto(&info.Blocks),
@@ -767,4 +773,21 @@ func (r *blocksServer) ProposalDepositors(ctx context.Context,
 			All:    all,
 		},
 	}, nil
+}
+
+func (r *blocksServer) RewardByAccount(ctx context.Context, in *pb.RewardByAccountRequest) (*pb.RewardByAccountResponse, error) {
+	res, err := r.srvTx.TotalRewardByAccount(ctx, in.Account)
+	if err != nil {
+		return nil, err
+	}
+
+	data := make([]*pb.Denom, 0)
+	for _, reward := range res {
+		data = append(data, &pb.Denom{
+			Denom:  reward.Denom,
+			Amount: reward.Amount.String(),
+		})
+	}
+
+	return &pb.RewardByAccountResponse{Amount: data}, nil
 }

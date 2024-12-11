@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"context"
+	"crypto/md5"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,14 +14,12 @@ import (
 
 	"gorm.io/gorm/clause"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/noders-team/cosmos-indexer/clients"
 	"github.com/noders-team/cosmos-indexer/core/tx"
 	"github.com/noders-team/cosmos-indexer/pkg/consumer"
 	"github.com/noders-team/cosmos-indexer/pkg/model"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
@@ -45,13 +43,12 @@ import (
 	"github.com/spf13/cobra"
 
 	probeClient "github.com/nodersteam/probe/client"
-	migrate "github.com/xakep666/mongo-migrate"
+
 	"gorm.io/gorm"
 )
 
 const (
 	modeFetcher = "fetcher"
-	modeStorage = "storage"
 )
 
 type Indexer struct {
@@ -605,9 +602,10 @@ func runIndexer(ctx context.Context, idxr *Indexer, startBlock, endBlock int64) 
 	}(ctx)
 
 	// migration
+	migrator := dbTypes.NewLocalMigrator(db, dbConnRepo, searchRepo, repoTxs)
 	go func() {
 		log.Info().Msgf("Starting migration")
-		db, err = mongoDBMigrate(ctx, db, dbConnRepo, searchRepo)
+		db, err = migrator.Migrate(ctx)
 		if err != nil {
 			log.Err(err).Msgf("Migration failed")
 			panic(err)
@@ -725,134 +723,6 @@ func runPipe(ctx context.Context, idxr *Indexer, rdb *redis.Client, topic string
 			pipe <- newRecord
 		}
 	}
-}
-
-func mongoDBMigrate(ctx context.Context,
-	db *mongo.Database,
-	pg *pgxpool.Pool, search repository.Search,
-) (*mongo.Database, error) {
-	m := migrate.NewMigrate(db, migrate.Migration{
-		Version:     1,
-		Description: "add unique index idx_txhash_type",
-		Up: func(ctx context.Context, db *mongo.Database) error {
-			config.Log.Info("starting v1 migration")
-
-			err := db.Collection("search").Drop(ctx)
-			if err != nil {
-				return err
-			}
-
-			opt := options.Index().SetName("idx_txhash_type").SetUnique(true)
-			keys := bson.D{{"tx_hash", 1}, {"type", 1}} //nolint
-			mdl := mongo.IndexModel{Keys: keys, Options: opt}
-			_, err = db.Collection("search").Indexes().CreateOne(ctx, mdl)
-			if err != nil {
-				log.Err(err).Msgf("error creating index for v1 migration")
-				return err
-			}
-
-			return nil
-		},
-		Down: func(ctx context.Context, db *mongo.Database) error {
-			_, err := db.Collection("search").Indexes().DropOne(ctx, "idx_txhash_type")
-			if err != nil {
-				log.Err(err).Msgf("error dropping index for v1 migration")
-				return err
-			}
-			return nil
-		},
-	}, migrate.Migration{ // TODO not the best place to migrate data
-		Version:     2,
-		Description: "migrate existing hashes",
-		Up: func(ctx context.Context, db *mongo.Database) error {
-			config.Log.Info("starting txs v2 migration")
-			rows, err := pg.Query(ctx, `select distinct hash from txes`)
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				return err
-			}
-			for rows.Next() {
-				var txHash string
-				if err = rows.Scan(&txHash); err != nil {
-					return err
-				}
-				if err = search.AddHash(context.Background(), txHash, "transaction", 0); err != nil {
-					log.Err(err).Msgf("Failed to add hash to index transaction %s", txHash)
-				}
-			}
-
-			config.Log.Info("starting blocks migration")
-			rows, err = pg.Query(ctx, `select distinct block_hash from blocks`)
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				return err
-			}
-			for rows.Next() {
-				var txHash string
-				if err = rows.Scan(&txHash); err != nil {
-					return err
-				}
-				if err = search.AddHash(context.Background(), txHash, "block", 0); err != nil {
-					log.Err(err).Msgf("Failed to add hash to index block %s", txHash)
-				}
-			}
-
-			return nil
-		},
-		Down: func(ctx context.Context, db *mongo.Database) error {
-			// ignoring, what's done is done.
-			return nil
-		},
-	}, migrate.Migration{ // TODO not the best place to migrate data
-		Version:     3,
-		Description: "migrate existing hashes with block height",
-		Up: func(ctx context.Context, db *mongo.Database) error {
-			config.Log.Info("starting txs v3 migration")
-			err := db.Collection("search").Drop(ctx)
-			if err != nil {
-				log.Err(err).Msgf("Failed to drop index, continue")
-			}
-
-			rows, err := pg.Query(ctx, `select distinct hash from txes`)
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				return err
-			}
-			for rows.Next() {
-				var txHash string
-				if err = rows.Scan(&txHash); err != nil {
-					return err
-				}
-				if err = search.AddHash(context.Background(), txHash, "transaction", 0); err != nil {
-					log.Err(err).Msgf("Failed to add hash to index")
-				}
-			}
-
-			config.Log.Info("starting blocks migration")
-			rows, err = pg.Query(ctx, `select distinct block_hash,height from blocks`)
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				return err
-			}
-			for rows.Next() {
-				var txHash string
-				var blockHeight int64
-				if err = rows.Scan(&txHash, &blockHeight); err != nil {
-					return err
-				}
-				if err = search.AddHash(context.Background(), txHash, "block", blockHeight); err != nil {
-					log.Err(err).Msgf("Failed to add hash to index")
-				}
-			}
-
-			return nil
-		},
-		Down: func(ctx context.Context, db *mongo.Database) error {
-			// ignoring, what's done is done.
-			return nil
-		},
-	})
-	if err := m.Up(ctx, migrate.AllAvailable); err != nil {
-		return nil, err
-	}
-
-	return db, nil
 }
 
 // connectPgxPool establishes a connection to a PostgreSQL database.
@@ -1091,15 +961,30 @@ func (idxr *Indexer) doDBUpdates(wg *sync.WaitGroup,
 				transaction.Block = data.block
 				res, err := txRepo.GetSenderAndReceiver(context.Background(), transaction.Hash)
 				if err != nil {
-					config.Log.Error("unable to find sender and receiver", err)
+					log.Err(err).Msgf("unable to find sender and receiver for tx %s", transaction.Hash)
+				} else {
+					transaction.SenderReceiver = res
 				}
-				transaction.SenderReceiver = res
 
 				// TODO not the best place
 				go func(tx models.Tx) {
-					errAggr := idxr.saveAggregated(context.Background(), txRepo, tx)
+					events, err := txRepo.GetEvents(context.Background(), tx.ID)
+					if err != nil {
+						log.Err(err).Msgf("Failed to get events for tx %s", tx.Hash)
+					}
+					errAggr := idxr.saveAggregated(context.Background(), txRepo, &tx, events)
 					if errAggr != nil {
-						log.Err(errAggr).Msgf("Failed to save aggregated tx")
+						log.Err(errAggr).Msgf("Failed to save aggregated for tx %s", tx.Hash)
+					}
+
+					errEvVals := idxr.saveAggregatedEventValues(context.Background(), &tx, events)
+					if errEvVals != nil {
+						log.Err(errEvVals).Msgf("Failed to save saveAggregatedEventValues for tx %s", tx.Hash)
+					}
+
+					errEv := idxr.saveAggregatedEvents(context.Background(), &tx, events)
+					if errEv != nil {
+						log.Err(errEv).Msgf("Failed to save saveAggregatedEvents for tx %s", tx.Hash)
 					}
 				}(transaction)
 
@@ -1142,10 +1027,65 @@ func (idxr *Indexer) doDBUpdates(wg *sync.WaitGroup,
 	}
 }
 
-func (idxr *Indexer) saveAggregated(ctx context.Context, txRepo repository.Txs, tx models.Tx) error {
-	events, err := txRepo.GetEvents(ctx, tx.ID)
-	if err != nil {
-		return err
+func (idxr *Indexer) saveAggregatedEventValues(ctx context.Context, tx *models.Tx, events []*model.TxEvents) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	for _, event := range events {
+		var txEvents models.TxEventsValsAggregated
+		txEvents.TxHash = tx.Hash
+		txEvents.MsgType = event.MessageType
+		txEvents.EvAttrValue = fmt.Sprintf("%x", md5.Sum([]byte(strings.ToLower(event.Value))))
+		txEvents.TxTimestamp = tx.Timestamp
+
+		log.Debug().Msgf("trying tosave aggregated tx_events %v", txEvents)
+		err := idxr.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			return tx.Clauses(clause.OnConflict{
+				DoNothing: true,
+			}).Create(&txEvents).Error
+		})
+		if err != nil {
+			log.Err(err).Msgf("error saving aggregated tx_events %v", txEvents)
+		}
+	}
+
+	return nil
+}
+
+func (idxr *Indexer) saveAggregatedEvents(ctx context.Context, tx *models.Tx, events []*model.TxEvents) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	for _, event := range events {
+		var txEvents models.TxEventsAggregated
+
+		txEvents.TxHash = tx.Hash
+		txEvents.MessageType = event.MessageType
+		txEvents.MessageTypeIndex = event.Index
+		txEvents.MessageEventType = event.Type
+		txEvents.MessageEventAttrIndex = event.EventIndex
+		txEvents.MessageEventAttrValue = event.Value
+		txEvents.MessageEventAttrKey = event.Key
+
+		log.Debug().Msgf("trying tosave aggregated saveAggregatedEvents %v", txEvents)
+		err := idxr.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			return tx.Clauses(clause.OnConflict{
+				DoNothing: true,
+			}).Create(&txEvents).Error
+		})
+		if err != nil {
+			log.Err(err).Msgf("error saving aggregated saveAggregatedEvents %v", txEvents)
+		}
+	}
+
+	return nil
+}
+
+func (idxr *Indexer) saveAggregated(ctx context.Context, txRepo repository.Txs, tx *models.Tx, events []*model.TxEvents) error {
+	if len(events) == 0 {
+		return nil
 	}
 
 	var txDelegateAggregated models.TxDelegateAggregated
@@ -1187,8 +1127,8 @@ func (idxr *Indexer) saveAggregated(ctx context.Context, txRepo repository.Txs, 
 	}
 
 	if isMsgDelegate || isMsgUndelegate {
-		return idxr.db.Transaction(func(tx *gorm.DB) error {
-			err = tx.Clauses(clause.OnConflict{
+		return idxr.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			err := tx.Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "hash"}},
 				DoNothing: true,
 			}).Where("hash = ?", txDelegateAggregated.Hash).FirstOrCreate(&txDelegateAggregated).Error

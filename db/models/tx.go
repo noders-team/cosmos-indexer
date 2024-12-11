@@ -213,3 +213,22 @@ type TxDelegateAggregated struct {
 	Denom       string
 	Sender      string
 }
+
+type TxEventsValsAggregated struct {
+	ID          uint
+	EvAttrValue string `gorm:"uniqueIndex:txEventsValsAggregatedIndex"`
+	MsgType     string `gorm:"uniqueIndex:txEventsValsAggregatedIndex"`
+	TxHash      string `gorm:"uniqueIndex:txEventsValsAggregatedIndex"`
+	TxTimestamp time.Time
+}
+
+type TxEventsAggregated struct {
+	ID                    uint
+	TxHash                string `gorm:"uniqueIndex:txEventsAggregatedIndex"`
+	MessageType           string `gorm:"uniqueIndex:txEventsAggregatedIndex"`
+	MessageTypeIndex      int    `gorm:"uniqueIndex:txEventsAggregatedIndex"`
+	MessageEventType      string `gorm:"uniqueIndex:txEventsAggregatedIndex"`
+	MessageEventAttrIndex int    `gorm:"uniqueIndex:txEventsAggregatedIndex"`
+	MessageEventAttrValue string
+	MessageEventAttrKey   string `gorm:"uniqueIndex:txEventsAggregatedIndex"`
+}
