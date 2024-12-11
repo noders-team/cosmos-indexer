@@ -12,10 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/uptrace/uptrace-go/uptrace"
-
-	"github.com/noders-team/cosmos-indexer/tracing"
-
 	"gorm.io/gorm/clause"
 
 	"github.com/jackc/pgx/v5"
@@ -250,15 +246,6 @@ func index(_ *cobra.Command, _ []string) {
 	ctx := context.Background()
 	defer ctx.Done()
 
-	span, err := tracing.InitTracing(ctx)
-	if err != nil {
-		panic(err)
-	}
-	defer uptrace.Shutdown(ctx)
-	defer span.Shutdown(ctx)
-
-	log.Info().Msgf("tracing initialized")
-
 	switch idxr.cfg.Base.Mode {
 	case modeFetcher:
 		if idxr.cfg.Base.ModeTopics == nil {
@@ -268,8 +255,8 @@ func index(_ *cobra.Command, _ []string) {
 		if idxr.cfg.Base.EndBlock < idxr.cfg.Base.StartBlock {
 			panic("end-block must be higher then start-block for fetcher mode")
 		}
-		if idxr.cfg.Base.GenesisBlocksStep == 0 {
-			idxr.cfg.Base.GenesisBlocksStep = 5000
+		if idxr.cfg.Base.ModeBlocksStep == 0 {
+			idxr.cfg.Base.ModeBlocksStep = 5000
 		}
 
 		runIndexerAsFetcher(ctx, idxr, idxr.cfg.Base.StartBlock, idxr.cfg.Base.EndBlock)
@@ -278,7 +265,7 @@ func index(_ *cobra.Command, _ []string) {
 			defaultTopics := []string{"indexer"}
 			idxr.cfg.Base.ModeTopics = &defaultTopics
 		}
-		runIndexer(ctx, idxr, true, idxr.cfg.Base.StartBlock, idxr.cfg.Base.EndBlock)
+		runIndexer(ctx, idxr, idxr.cfg.Base.StartBlock, idxr.cfg.Base.EndBlock)
 	}
 
 	log.Info().Msgf("====EXITED=====")
@@ -373,7 +360,7 @@ func runIndexerAsFetcher(ctx context.Context, idxr *Indexer, startBlock, endBloc
 	}
 
 	log.Info().Msgf("running indexer as fetcher mode.")
-	steps := idxr.cfg.Base.GenesisBlocksStep
+	steps := idxr.cfg.Base.ModeBlocksStep
 
 	numGoroutines, blocks := calculateGoroutines(startBlock, endBlock, steps)
 	counter := startBlock
@@ -417,7 +404,7 @@ func roundRobinTopic(idxr *Indexer) string {
 	return topics[int(time.Now().UnixNano())%len(topics)]
 }
 
-func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, endBlock int64) {
+func runIndexer(ctx context.Context, idxr *Indexer, startBlock, endBlock int64) {
 	// blockChans are just the block heights; limit max jobs in the queue, otherwise this queue would contain one
 	// item (block height) for every block on the entire blockchain we're indexing. Furthermore, once the queue
 	// is close to empty, we will spin up a new thread to fill it up with new jobs.
@@ -517,28 +504,27 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 	}
 	cache := repository.NewCache(rdb)
 
-	if runSrv {
-		log.Info().Msgf("running Blocks server %d", idxr.cfg.Server.Port)
-		grpcServURL := fmt.Sprintf(":%d", idxr.cfg.Server.Port)
-		listener, err := net.Listen("tcp", grpcServURL)
-		if err != nil {
-			config.Log.Fatal("Unable to run listener", err)
-		}
-
-		blocksServer := server.NewBlocksServer(srvBlocks, srvTxs, srvSearch, *cache)
-		size := 1024 * 1024 * 50
-		grpcServer := grpc.NewServer(
-			grpc.MaxSendMsgSize(size),
-			grpc.MaxRecvMsgSize(size))
-		blocks.RegisterBlocksServiceServer(grpcServer, blocksServer)
-		go func() {
-			log.Info().Msgf("blocks server started: " + grpcServURL)
-			if err = grpcServer.Serve(listener); err != nil {
-				grpcServer.GracefulStop()
-				return
-			}
-		}()
+	log.Info().Msgf("running Blocks server %d", idxr.cfg.Server.Port)
+	grpcServURL := fmt.Sprintf(":%d", idxr.cfg.Server.Port)
+	listener, err := net.Listen("tcp", grpcServURL)
+	if err != nil {
+		config.Log.Fatal("Unable to run listener", err)
 	}
+
+	blocksServer := server.NewBlocksServer(srvBlocks, srvTxs, srvSearch, *cache)
+	size := 1024 * 1024 * 50
+	grpcServer := grpc.NewServer(
+		grpc.MaxSendMsgSize(size),
+		grpc.MaxRecvMsgSize(size))
+	blocks.RegisterBlocksServiceServer(grpcServer, blocksServer)
+	go func() {
+		log.Info().Msgf("blocks server started: " + grpcServURL)
+		if err = grpcServer.Serve(listener); err != nil {
+			grpcServer.GracefulStop()
+			return
+		}
+	}()
+
 	chBlocks := make(chan *model.BlockInfo, 1000)
 	defer close(chBlocks)
 	chTxs := make(chan *models.Tx, 1000)
@@ -546,7 +532,7 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 
 	cacheConsumer := consumer.NewCacheConsumer(cache, chBlocks, chTxs, cache)
 	go func(ctx context.Context) {
-		err := cacheConsumer.RunBlocks(ctx)
+		err = cacheConsumer.RunBlocks(ctx)
 		if err != nil {
 			log.Err(err).Msg("Error running cache: RunBlocks")
 		}
@@ -567,14 +553,12 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 		}
 	}(ctx)
 
-	if runSrv {
-		go func(ctx context.Context) {
-			err := aggregatesConsumer.RefreshMaterializedViews(ctx)
-			if err != nil {
-				log.Err(err).Msgf("Error refreshing materialized views")
-			}
-		}(ctx)
-	}
+	go func(ctx context.Context) {
+		err := aggregatesConsumer.RefreshMaterializedViews(ctx)
+		if err != nil {
+			log.Err(err).Msgf("Error refreshing materialized views")
+		}
+	}(ctx)
 
 	// pipe between fetcher and reader
 	pipe := make(chan core.IndexerBlockEventData)
@@ -597,9 +581,6 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 		indexer.blockEventFilterRegistries,
 		chBlocks,
 		func() *repository.Cache {
-			if idxr.cfg.Base.GenesisIndex {
-				return nil
-			}
 			return cache
 		}(),
 		&indexer.cl.Codec)
@@ -615,15 +596,13 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 		}
 	}()
 
-	if runSrv {
-		blSearchConsumer := consumer.NewSearchBlocksConsumer(rdb, "pub/blocks", searchRepo) // TODO
-		go func(ctx context.Context) {
-			err := blSearchConsumer.Consume(ctx)
-			if err != nil {
-				log.Err(err).Msgf("error on tx search consumer closing")
-			}
-		}(ctx)
-	}
+	blSearchConsumer := consumer.NewSearchBlocksConsumer(rdb, "pub/blocks", searchRepo) // TODO
+	go func(ctx context.Context) {
+		err := blSearchConsumer.Consume(ctx)
+		if err != nil {
+			log.Err(err).Msgf("error on tx search consumer closing")
+		}
+	}(ctx)
 
 	// migration
 	go func() {
@@ -637,70 +616,32 @@ func runIndexer(ctx context.Context, idxr *Indexer, runSrv bool, startBlock, end
 	}()
 
 	// for genesis indexing running only blocks below --start.block
-	if idxr.cfg.Base.GenesisIndex {
-		log.Info().Msgf("found genesis-index param enabled.")
-		steps := idxr.cfg.Base.GenesisBlocksStep
-
-		numGoroutines, blocks := calculateGoroutines(0, idxr.cfg.Base.StartBlock, steps)
-		counter := int64(0)
-		log.Info().Msgf("num go routines for genesis indexing %d", numGoroutines)
-		for i := int64(0); i < numGoroutines; i++ {
-			blocksToProceed := blocks[i]
-			endBlockInternal := counter + blocksToProceed
-
-			log.Info().Msgf("🚀starting indexer for blocks %d - %d", counter, endBlockInternal)
-			allBlocks := make(map[int64]struct{})
-			bls, err := dbTypes.GetBlocksInRange(idxr.db, dbChainID, counter, endBlockInternal)
-			if err == nil {
-				for _, b := range bls {
-					allBlocks[b.Height] = struct{}{}
-				}
-			}
-
-			blockEnqueueFunction, err := core.GenerateDefaultEnqueueFunction(idxr.db, *idxr.cfg, dbChainID,
-				idxr.rpcClient, counter, endBlockInternal, allBlocks)
-			if err != nil {
-				config.Log.Fatal("Failed to generate block enqueue function", err)
-			}
-			go func() {
-				err = blockEnqueueFunction(blockEnqueueChan)
-				if err != nil {
-					config.Log.Fatal("Block enqueue failed", err)
-				}
-			}()
-
-			counter += blocksToProceed
-		}
-
-		<-ctx.Done() // TODO find better place
-	} else {
-		emptyBl := make(map[int64]struct{})
-		var blockEnqueueFunction func(chan *core.EnqueueData) error
-		switch {
-		// Default block enqueue functions based on config values
-		case idxr.cfg.Base.ReindexMessageType != "":
-			blockEnqueueFunction, err = core.GenerateMsgTypeEnqueueFunction(idxr.db, *idxr.cfg, dbChainID,
-				idxr.cfg.Base.ReindexMessageType, startBlock, endBlock)
-			if err != nil {
-				config.Log.Fatal("Failed to generate block enqueue function", err)
-			}
-		case idxr.cfg.Base.BlockInputFile != "":
-			blockEnqueueFunction, err = core.GenerateBlockFileEnqueueFunction(*idxr.cfg, idxr.cfg.Base.BlockInputFile, idxr.rpcClient)
-			if err != nil {
-				config.Log.Fatal("Failed to generate block enqueue function", err)
-			}
-		default:
-			blockEnqueueFunction, err = core.GenerateDefaultEnqueueFunction(idxr.db, *idxr.cfg, dbChainID,
-				idxr.rpcClient, startBlock, endBlock, emptyBl)
-			if err != nil {
-				config.Log.Fatal("Failed to generate block enqueue function", err)
-			}
-		}
-
-		err = blockEnqueueFunction(blockEnqueueChan)
+	emptyBl := make(map[int64]struct{})
+	var blockEnqueueFunction func(chan *core.EnqueueData) error
+	switch {
+	// Default block enqueue functions based on config values
+	case idxr.cfg.Base.ReindexMessageType != "":
+		blockEnqueueFunction, err = core.GenerateMsgTypeEnqueueFunction(idxr.db, *idxr.cfg, dbChainID,
+			idxr.cfg.Base.ReindexMessageType, startBlock, endBlock)
 		if err != nil {
-			config.Log.Fatal("Block enqueue failed", err)
+			config.Log.Fatal("Failed to generate block enqueue function", err)
 		}
+	case idxr.cfg.Base.BlockInputFile != "":
+		blockEnqueueFunction, err = core.GenerateBlockFileEnqueueFunction(*idxr.cfg, idxr.cfg.Base.BlockInputFile, idxr.rpcClient)
+		if err != nil {
+			config.Log.Fatal("Failed to generate block enqueue function", err)
+		}
+	default:
+		blockEnqueueFunction, err = core.GenerateDefaultEnqueueFunction(idxr.db, *idxr.cfg, dbChainID,
+			idxr.rpcClient, startBlock, endBlock, emptyBl)
+		if err != nil {
+			config.Log.Fatal("Failed to generate block enqueue function", err)
+		}
+	}
+
+	err = blockEnqueueFunction(blockEnqueueChan)
+	if err != nil {
+		config.Log.Fatal("Block enqueue failed", err)
 	}
 
 	close(blockEnqueueChan)
@@ -1070,7 +1011,7 @@ func (idxr *Indexer) processBlocks(wg *sync.WaitGroup,
 		blocksCh <- idxr.toBlockInfo(block)
 
 		if cache != nil {
-			if err := cache.PublishBlock(context.Background(), &block); err != nil {
+			if err = cache.PublishBlock(context.Background(), &block); err != nil {
 				config.Log.Error("Failed to publish block info", err)
 			}
 		}

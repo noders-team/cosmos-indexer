@@ -27,10 +27,9 @@ type IndexBase struct {
 	ModeTopics                 *[]string `mapstructure:"mode-storage-topics"`
 	ModeCoolDownMins           int       `mapstructure:"mode-cooldown-mins"`
 	ModeCoolDownCount          int       `mapstructure:"mode-cooldown-count"`
+	ModeBlocksStep             int64     `mapstructure:"mode-blocks-step"`
 	ReindexMessageType         string    `mapstructure:"reindex-message-type"`
 	ReattemptFailedBlocks      bool      `mapstructure:"reattempt-failed-blocks"`
-	GenesisIndex               bool      `mapstructure:"genesis-index"`
-	GenesisBlocksStep          int64     `mapstructure:"genesis-blocks-step"`
 	StartBlock                 int64     `mapstructure:"start-block"`
 	EndBlock                   int64     `mapstructure:"end-block"`
 	BlockInputFile             string    `mapstructure:"block-input-file"`
@@ -64,8 +63,7 @@ func SetupIndexSpecificFlags(conf *IndexConfig, cmd *cobra.Command) {
 	// filter configs
 	cmd.PersistentFlags().StringVar(&conf.Base.FilterFile, "base.filter-file", "", "path to a file containing a JSON config of block event and message type filters to apply to beginblocker events, endblocker events and TX messages")
 	// other base setting
-	cmd.PersistentFlags().BoolVar(&conf.Base.GenesisIndex, "base.genesis-index", false, "index chain from genesis block")
-	cmd.PersistentFlags().Int64Var(&conf.Base.GenesisBlocksStep, "base.genesis-blocks-step", 5000, "block gap for genesis threads")
+	cmd.PersistentFlags().Int64Var(&conf.Base.ModeBlocksStep, "base.mode-blocks-step", 5000, "block gap for genesis threads")
 
 	cmd.PersistentFlags().Int64Var(&conf.Base.RPCWorkers, "base.rpc-workers", 1, "rpc workers")
 	cmd.PersistentFlags().BoolVar(&conf.Base.WaitForChain, "base.wait-for-chain", false, "wait for chain to be in sync?")

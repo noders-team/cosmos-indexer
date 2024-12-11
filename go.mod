@@ -46,7 +46,6 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.9.0
-	github.com/uptrace/uptrace-go v1.31.0
 	github.com/xakep666/mongo-migrate v0.3.2
 	go.mongodb.org/mongo-driver v1.14.0
 	go.opentelemetry.io/contrib/propagators/aws v1.31.0
