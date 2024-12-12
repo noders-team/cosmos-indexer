@@ -3,8 +3,8 @@ name: Deploy Indexer - PROD (new database)
 on:
   workflow_dispatch:
   push:
-    tags:
-      - '*'
+    branches:
+      - dev
 
 jobs:
   build:
