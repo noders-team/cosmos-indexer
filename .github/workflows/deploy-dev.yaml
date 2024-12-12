@@ -123,7 +123,6 @@ jobs:
                 --base.throttling=${{ vars.BASE_THROTTLING || 2.005 }} \
                 --base.rpc-workers=${{ vars.BASE_RPC_WORKERS || 10 }} \
                 --base.index-transactions=${{ vars.BASE_INDEX_TRANSACTIONS || true }} \
-                --base.index-block-events=${{ vars.BASE_INDEX_BLOCK_EVENTS || false }} \
                 --base.reindex=${{ vars.BASE_REINDEX || false }} \
                 --base.mode-blocks-step=${{ vars.BASE_GENESIS_BLOCKS_STEP || 5000}} \
                 --probe.rpc=${{ vars.PROBE_RPC }} \
