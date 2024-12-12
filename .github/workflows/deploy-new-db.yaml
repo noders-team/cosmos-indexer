@@ -3,8 +3,8 @@ name: Deploy Indexer - PROD (new database)
 on:
   workflow_dispatch:
   push:
-    tags:
-      - '*'
+    branches:
+      - dev
 
 jobs:
   build:
@@ -31,7 +31,7 @@ jobs:
 
     strategy:
       matrix:
-        environment: [ 'zetachain-prod' ]
+        environment: [ 'nillion-testnet-prod' ]
       fail-fast: false
 
     environment: ${{ matrix.environment }}
