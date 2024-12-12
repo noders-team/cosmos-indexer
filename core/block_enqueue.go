@@ -21,7 +21,6 @@ import (
 
 type EnqueueData struct {
 	Height            int64
-	IndexBlockEvents  bool
 	IndexTransactions bool
 }
 
@@ -92,7 +91,6 @@ func GenerateBlockFileEnqueueFunction(cfg config.IndexConfig,
 			config.Log.Debugf("Sending block %v to be indexed.", height)
 			// Add the new block to the queue
 			blockChan <- &EnqueueData{
-				IndexBlockEvents:  cfg.Base.BlockEventIndexingEnabled,
 				IndexTransactions: cfg.Base.TransactionIndexingEnabled,
 				Height:            int64(height),
 			}
@@ -135,7 +133,6 @@ func GenerateMsgTypeEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 
 			// Add the new block to the queue
 			blockChan <- &EnqueueData{
-				IndexBlockEvents:  cfg.Base.BlockEventIndexingEnabled,
 				IndexTransactions: cfg.Base.TransactionIndexingEnabled,
 				Height:            block,
 			}
@@ -152,7 +149,7 @@ func GenerateMsgTypeEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 // indexed according to the current configuration.
 // If failed block reattempts are enabled, it will enqueue those according to the passed in configuration as well.
 func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID uint,
-	rpcClient clients.ChainRPC, startBlock, endBlock int64,
+	rpcClient clients.ChainRPC, startBlock, endBlock int64, allBlocks map[int64]struct{},
 ) (func(chan *EnqueueData) error, error) {
 	var failedBlockEnqueueData []*EnqueueData
 	if cfg.Base.ReattemptFailedBlocks {
@@ -160,14 +157,6 @@ func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 		var failedBlocks []models.FailedBlock
 
 		uniqueBlockFailures := make(map[int64]*EnqueueData)
-		if cfg.Base.BlockEventIndexingEnabled {
-			err := db.Table("failed_event_blocks").Where("blockchain_id = ?::int", chainID).Order("height asc").Scan(&failedEventBlocks).Error
-			if err != nil {
-				config.Log.Error("Error retrieving failed event blocks for reenqueue", err)
-				return nil, err
-			}
-		}
-
 		if cfg.Base.TransactionIndexingEnabled {
 			err := db.Table("failed_blocks").Where("blockchain_id = ?::int", chainID).Order("height asc").Scan(&failedBlocks).Error
 			if err != nil {
@@ -179,7 +168,6 @@ func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 		for _, failedEventBlock := range failedEventBlocks {
 			uniqueBlockFailures[failedEventBlock.Height] = &EnqueueData{
 				Height:            failedEventBlock.Height,
-				IndexBlockEvents:  true,
 				IndexTransactions: false,
 			}
 		}
@@ -190,7 +178,6 @@ func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 			} else {
 				uniqueBlockFailures[failedBlock.Height] = &EnqueueData{
 					Height:            failedBlock.Height,
-					IndexBlockEvents:  false,
 					IndexTransactions: true,
 				}
 			}
@@ -212,7 +199,9 @@ func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 
 	var blocksFromStart []models.Block
 
-	if !reindexing {
+	if reindexing {
+		config.Log.Info("Reindexing is enabled starting from initial start height")
+	} else {
 		var err error
 		config.Log.Info("Reindexing is disabled, skipping blocks that have already been indexed")
 		// We need to pick up where we last left off, find blocks after start and skip already indexed blocks
@@ -224,8 +213,6 @@ func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 			config.Log.Info(fmt.Sprintf("start blocks: %d", blocksFromStart[0].Height))
 			startBlock = blocksFromStart[0].Height
 		}
-	} else {
-		config.Log.Info("Reindexing is enabled starting from initial start height")
 	}
 
 	log.Info().Msgf("block queue start and end blocks: %d - %d", startBlock, endBlock)
@@ -241,15 +228,11 @@ func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 			for _, block := range failedBlockEnqueueData {
 
 				switch {
-				case block.IndexBlockEvents && block.IndexTransactions:
-					config.Log.Infof("Re-attempting failed block %v for both block events and transactions", block.Height)
-				case block.IndexBlockEvents:
-					config.Log.Infof("Re-attempting failed block: %v for block events", block.Height)
 				case block.IndexTransactions:
 					config.Log.Infof("Re-attempting failed block: %v for transactions", block.Height)
 				}
 
-				if block.IndexBlockEvents || block.IndexTransactions {
+				if block.IndexTransactions {
 					blockChan <- block
 					if cfg.Base.Throttling != 0 {
 						time.Sleep(time.Second * time.Duration(cfg.Base.Throttling))
@@ -272,6 +255,15 @@ func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 			} else if cfg.Base.ExitWhenCaughtUp && currBlock > latestBlock {
 				config.Log.Info("Hit the last block we're allowed to index, exiting enqueue func.")
 				return nil
+			}
+
+			if len(allBlocks) > 0 {
+				_, exists := allBlocks[currBlock]
+				if exists {
+					config.Log.Infof("===> Block %d already indexed, skipping", currBlock)
+					currBlock++
+					continue
+				}
 			}
 
 			// The job queue is running out of jobs to process, see if the blockchain has produced any new blocks we haven't indexed yet.
@@ -299,14 +291,7 @@ func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 					if !reindexing && blockExists {
 						config.Log.Debugf("Block %d already in DB, checking if it needs indexing", currBlock)
 
-						needsIndex := false
-
-						if cfg.Base.BlockEventIndexingEnabled && !block.BlockEventsIndexed {
-							needsIndex = true
-						} else if cfg.Base.TransactionIndexingEnabled && !block.TxIndexed {
-							needsIndex = true
-						}
-
+						needsIndex := cfg.Base.TransactionIndexingEnabled && !block.TxIndexed
 						if !needsIndex {
 							config.Log.Debugf("Block %d already indexed, skipping", currBlock)
 							currBlock++
@@ -315,7 +300,6 @@ func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 						config.Log.Debugf("Block %d needs indexing, adding to queue", currBlock)
 						blockChan <- &EnqueueData{
 							Height:            currBlock,
-							IndexBlockEvents:  cfg.Base.BlockEventIndexingEnabled && !block.BlockEventsIndexed,
 							IndexTransactions: cfg.Base.TransactionIndexingEnabled && !block.TxIndexed,
 						}
 
@@ -333,7 +317,6 @@ func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 					// Add the new block to the queue
 					blockChan <- &EnqueueData{
 						Height:            currBlock,
-						IndexBlockEvents:  cfg.Base.BlockEventIndexingEnabled,
 						IndexTransactions: cfg.Base.TransactionIndexingEnabled,
 					}
 					currBlock++
