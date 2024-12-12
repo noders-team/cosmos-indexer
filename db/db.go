@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/noders-team/cosmos-indexer/pkg/model"
+
 	"github.com/noders-team/cosmos-indexer/config"
 	"github.com/noders-team/cosmos-indexer/db/models"
 	"github.com/rs/zerolog/log"
@@ -299,27 +301,27 @@ func migrateDenomModels(db *gorm.DB) error {
 
 func migrateTXModels(db *gorm.DB) error {
 	return db.AutoMigrate(
-		&models.Tx{},
-		&models.Fee{},
+		&model.Tx{},
+		&model.Fee{},
 		&models.Address{},
-		&models.MessageType{},
-		&models.Message{},
-		&models.FailedTx{},
-		&models.FailedMessage{},
-		&models.MessageEvent{},
-		&models.MessageEventType{},
-		&models.MessageEventAttribute{},
-		&models.MessageEventAttributeKey{},
-		&models.AuthInfo{},
-		&models.AuthInfoFee{},
-		&models.InfoFeeAmount{},
-		&models.Tip{},
-		&models.TipAmount{},
-		&models.SignerInfo{},
-		&models.TxResponse{},
-		&models.TxDelegateAggregated{},
-		&models.TxEventsValsAggregated{},
-		&models.TxEventsAggregated{},
+		&model.MessageType{},
+		&model.Message{},
+		&model.FailedTx{},
+		&model.FailedMessage{},
+		&model.MessageEvent{},
+		&model.MessageEventType{},
+		&model.MessageEventAttribute{},
+		&model.MessageEventAttributeKey{},
+		&model.AuthInfo{},
+		&model.AuthInfoFee{},
+		&model.InfoFeeAmount{},
+		&model.Tip{},
+		&model.TipAmount{},
+		&model.SignerInfo{},
+		&model.TxResponse{},
+		&model.TxDelegateAggregated{},
+		&model.TxEventsValsAggregated{},
+		&model.TxEventsAggregated{},
 	)
 }
 
@@ -538,7 +540,7 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 		block.Signatures = signaturesCopy
 
 		// pull txes and insert them
-		uniqueTxes := make(map[string]models.Tx)
+		uniqueTxes := make(map[string]model.Tx)
 		uniqueAddress := make(map[string]models.Address)
 
 		denomMap := make(map[string]models.Denom)
@@ -591,7 +593,7 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 			}
 		}
 
-		var txesSlice []models.Tx
+		var txesSlice []model.Tx
 		config.Log.Infof("Unique Txs size %d for block %d", len(uniqueTxes), block.Height)
 		for _, tx := range uniqueTxes {
 			// create auth_info address if it doesn't exist
@@ -767,7 +769,7 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 		for txIndex, tx := range txs {
 			tx.Tx = uniqueTxes[tx.Tx.Hash]
 			txs[txIndex].Tx = tx.Tx
-			var messagesSlice []*models.Message
+			var messagesSlice []*model.Message
 			for messageIndex := range tx.Messages {
 				tx.Messages[messageIndex].Message.TxID = tx.Tx.ID
 				tx.Messages[messageIndex].Message.Tx = tx.Tx
@@ -803,7 +805,7 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 				}
 			}
 
-			var messagesEventsSlice []*models.MessageEvent
+			var messagesEventsSlice []*model.MessageEvent
 			for messageIndex := range tx.Messages {
 				for eventIndex := range tx.Messages[messageIndex].MessageEvents {
 					tx.Messages[messageIndex].MessageEvents[eventIndex].MessageEvent.MessageID = tx.Messages[messageIndex].Message.ID
@@ -825,7 +827,7 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 				}
 			}
 
-			var messagesEventsAttributesSlice []*models.MessageEventAttribute
+			var messagesEventsAttributesSlice []*model.MessageEventAttribute
 			for messageIndex := range tx.Messages {
 				for eventIndex := range tx.Messages[messageIndex].MessageEvents {
 					for attributeIndex := range tx.Messages[messageIndex].MessageEvents[eventIndex].Attributes {
@@ -857,15 +859,15 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 	return block, txs, err
 }
 
-func indexMessageTypes(db *gorm.DB, txs []TxDBWrapper) (map[string]models.MessageType, error) {
-	fullUniqueBlockMessageTypes := make(map[string]models.MessageType)
+func indexMessageTypes(db *gorm.DB, txs []TxDBWrapper) (map[string]model.MessageType, error) {
+	fullUniqueBlockMessageTypes := make(map[string]model.MessageType)
 	for _, tx := range txs {
 		for messageTypeKey, messageType := range tx.UniqueMessageTypes {
 			fullUniqueBlockMessageTypes[messageTypeKey] = messageType
 		}
 	}
 
-	var messageTypesSlice []models.MessageType
+	var messageTypesSlice []model.MessageType
 	for _, messageType := range fullUniqueBlockMessageTypes {
 		messageTypesSlice = append(messageTypesSlice, messageType)
 	}
@@ -886,8 +888,8 @@ func indexMessageTypes(db *gorm.DB, txs []TxDBWrapper) (map[string]models.Messag
 	return fullUniqueBlockMessageTypes, nil
 }
 
-func indexMessageEventTypes(db *gorm.DB, txs []TxDBWrapper) (map[string]models.MessageEventType, error) {
-	fullUniqueBlockMessageEventTypes := make(map[string]models.MessageEventType)
+func indexMessageEventTypes(db *gorm.DB, txs []TxDBWrapper) (map[string]model.MessageEventType, error) {
+	fullUniqueBlockMessageEventTypes := make(map[string]model.MessageEventType)
 
 	for _, tx := range txs {
 		for messageEventTypeKey, messageEventType := range tx.UniqueMessageEventTypes {
@@ -895,7 +897,7 @@ func indexMessageEventTypes(db *gorm.DB, txs []TxDBWrapper) (map[string]models.M
 		}
 	}
 
-	var messageTypesSlice []models.MessageEventType
+	var messageTypesSlice []model.MessageEventType
 	for _, messageType := range fullUniqueBlockMessageEventTypes {
 		messageTypesSlice = append(messageTypesSlice, messageType)
 	}
@@ -916,8 +918,8 @@ func indexMessageEventTypes(db *gorm.DB, txs []TxDBWrapper) (map[string]models.M
 	return fullUniqueBlockMessageEventTypes, nil
 }
 
-func indexMessageEventAttributeKeys(db *gorm.DB, txs []TxDBWrapper) (map[string]models.MessageEventAttributeKey, error) {
-	fullUniqueMessageEventAttributeKeys := make(map[string]models.MessageEventAttributeKey)
+func indexMessageEventAttributeKeys(db *gorm.DB, txs []TxDBWrapper) (map[string]model.MessageEventAttributeKey, error) {
+	fullUniqueMessageEventAttributeKeys := make(map[string]model.MessageEventAttributeKey)
 
 	for _, tx := range txs {
 		for messageEventAttributeKey, messageEventAttribute := range tx.UniqueMessageAttributeKeys {
@@ -925,7 +927,7 @@ func indexMessageEventAttributeKeys(db *gorm.DB, txs []TxDBWrapper) (map[string]
 		}
 	}
 
-	var messageEventAttributeKeysSlice []models.MessageEventAttributeKey
+	var messageEventAttributeKeysSlice []model.MessageEventAttributeKey
 	for _, messageEventAttributeKey := range fullUniqueMessageEventAttributeKeys {
 		messageEventAttributeKeysSlice = append(messageEventAttributeKeysSlice, messageEventAttributeKey)
 	}

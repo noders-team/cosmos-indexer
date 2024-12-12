@@ -252,7 +252,7 @@ func (r *blocksServer) TransactionRawLog(ctx context.Context, in *pb.Transaction
 	return &pb.TransactionRawLogResponse{RawLog: resp}, nil
 }
 
-func (r *blocksServer) txToProto(tx *models.Tx) *pb.TxByHash {
+func (r *blocksServer) txToProto(tx *model.Tx) *pb.TxByHash {
 	return &pb.TxByHash{
 		Memo:                        tx.Memo,
 		TimeoutHeight:               fmt.Sprintf("%d", tx.TimeoutHeight),
@@ -323,7 +323,7 @@ func (r *blocksServer) txSenderToProto(in *model.TxSenderReceiver) *pb.TxSenderR
 	}
 }
 
-func (r *blocksServer) toFeesProto(fees []models.Fee) []*pb.Fee {
+func (r *blocksServer) toFeesProto(fees []model.Fee) []*pb.Fee {
 	res := make([]*pb.Fee, 0)
 	for _, fee := range fees {
 		res = append(res, &pb.Fee{
@@ -344,7 +344,7 @@ func (r *blocksServer) toBlockProto(bl *models.Block) *pb.Block {
 	}
 }
 
-func (r *blocksServer) txTipToProto(tips []models.TipAmount) []*pb.Denom {
+func (r *blocksServer) txTipToProto(tips []model.TipAmount) []*pb.Denom {
 	denoms := make([]*pb.Denom, 0)
 	for _, tip := range tips {
 		denoms = append(denoms, &pb.Denom{
@@ -364,7 +364,7 @@ func (r *blocksServer) TransactionSigners(ctx context.Context, in *pb.Transactio
 	return &pb.TransactionSignersResponse{Signers: r.toSignerInfosProto(resp)}, nil
 }
 
-func (r *blocksServer) toSignerInfosProto(signs []*models.SignerInfo) []*pb.SignerInfo {
+func (r *blocksServer) toSignerInfosProto(signs []*model.SignerInfo) []*pb.SignerInfo {
 	res := make([]*pb.SignerInfo, 0)
 	for _, sign := range signs {
 		res = append(res, &pb.SignerInfo{
