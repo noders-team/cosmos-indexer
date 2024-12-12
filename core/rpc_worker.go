@@ -29,7 +29,6 @@ type IndexerBlockEventData struct {
 	BlockEventRequestsFailed bool
 	GetTxsResponse           *txTypes.GetTxsEventResponse
 	TxRequestsFailed         bool
-	IndexBlockEvents         bool
 	IndexTransactions        bool
 }
 
@@ -55,7 +54,6 @@ func (s *IndexerBlockEventData) MarshalJSON(cdc *probeClient.Codec) ([]byte, err
 		"BlockEventRequestsFailed": s.BlockEventRequestsFailed,
 		"GetTxsResponse":           base64.StdEncoding.EncodeToString(txResp),
 		"TxRequestsFailed":         s.TxRequestsFailed,
-		"IndexBlockEvents":         s.IndexBlockEvents,
 		"IndexTransactions":        s.IndexTransactions,
 	}
 
@@ -120,9 +118,6 @@ func (s *IndexerBlockEventData) UnmarshalJSON(data []byte) error {
 
 	txRequestsFailed, _ := mapped["TxRequestsFailed"]
 	s.TxRequestsFailed = txRequestsFailed.(bool)
-
-	indexBlockEvents, _ := mapped["IndexBlockEvents"]
-	s.IndexBlockEvents = indexBlockEvents.(bool)
 
 	indexTransactions, _ := mapped["IndexTransactions"]
 	s.IndexTransactions = indexTransactions.(bool)
@@ -197,7 +192,6 @@ func (w *blockRPCWorker) FetchBlock(rpcClient rpc.URIClient, block *EnqueueData)
 	currentHeightIndexerData := IndexerBlockEventData{
 		BlockEventRequestsFailed: false,
 		TxRequestsFailed:         false,
-		IndexBlockEvents:         block.IndexBlockEvents,
 		IndexTransactions:        block.IndexTransactions,
 	}
 
@@ -229,22 +223,23 @@ func (w *blockRPCWorker) FetchBlock(rpcClient rpc.URIClient, block *EnqueueData)
 		retryMaxWait = w.cfg.Base.RequestRetryMaxWait
 	}
 
-	if block.IndexBlockEvents {
-		bresults, err := rpc.GetBlockResultWithRetry(rpcClient,
-			block.Height, retryAttempts, retryMaxWait)
+	/*
+		if block.IndexBlockEvents {
+			bresults, err := rpc.GetBlockResultWithRetry(rpcClient,
+				block.Height, retryAttempts, retryMaxWait)
 
-		if err != nil {
-			config.Log.Errorf("Error getting block results for block %v from RPC. Err: %v", block, err)
-			err := dbTypes.UpsertFailedEventBlock(w.db, block.Height, w.chainStringID, w.cfg.Probe.ChainName)
 			if err != nil {
-				config.Log.Fatal("Failed to insert failed block event", err)
+				config.Log.Errorf("Error getting block results for block %v from RPC. Err: %v", block, err)
+				err := dbTypes.UpsertFailedEventBlock(w.db, block.Height, w.chainStringID, w.cfg.Probe.ChainName)
+				if err != nil {
+					config.Log.Fatal("Failed to insert failed block event", err)
+				}
+				currentHeightIndexerData.BlockResultsData = nil
+				currentHeightIndexerData.BlockEventRequestsFailed = true
+			} else {
+				currentHeightIndexerData.BlockResultsData = bresults
 			}
-			currentHeightIndexerData.BlockResultsData = nil
-			currentHeightIndexerData.BlockEventRequestsFailed = true
-		} else {
-			currentHeightIndexerData.BlockResultsData = bresults
-		}
-	}
+		}*/
 
 	if block.IndexTransactions {
 		txsEventResp, err := w.rpcClient.GetTxsByBlockHeight(block.Height)

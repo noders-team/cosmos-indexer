@@ -85,12 +85,11 @@ services:
         --log.level = info \
         --base.mode fetcher \
         --base.start-block 1 \
-        --base.end-block 500 \
+        --base.end-block 10000 \
         --base.throttling 2.005 \
         --base.rpc-workers 2 \
         --base.index-transactions true \
-        --base.index-block-events false \
-        --base.genesis-blocks-step 100 \
+        --base.mode-blocks-step 1000 \
         --probe.rpc http://celestia-mainnet-consensus.itrocket.net:26657 \
         --probe.account-prefix celestia \
         --probe.chain-id celestia \
@@ -134,7 +133,6 @@ services:
       --base.throttling 2.005 \
       --base.rpc-workers 1 \
       --base.index-transactions true \
-      --base.index-block-events false \
       --probe.rpc http://celestia-mainnet-consensus.itrocket.net:26657 \
       --probe.account-prefix celestia \
       --probe.chain-id celestia \

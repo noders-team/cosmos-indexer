@@ -40,7 +40,6 @@ type IndexBase struct {
 	WaitForChainDelay          int64     `mapstructure:"wait-for-chain-delay"`
 	TransactionIndexingEnabled bool      `mapstructure:"index-transactions"`
 	ExitWhenCaughtUp           bool      `mapstructure:"exit-when-caught-up"`
-	BlockEventIndexingEnabled  bool      `mapstructure:"index-block-events"`
 	FilterFile                 string    `mapstructure:"filter-file"`
 }
 
@@ -59,7 +58,6 @@ func SetupIndexSpecificFlags(conf *IndexConfig, cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&conf.Base.ReindexMessageType, "base.reindex-message-type", "", "a Cosmos message type URL. When set, the block enqueue method will reindex all blocks between start and end block that contain this message type.")
 	// block event indexing
 	cmd.PersistentFlags().BoolVar(&conf.Base.TransactionIndexingEnabled, "base.index-transactions", false, "enable transaction indexing?")
-	cmd.PersistentFlags().BoolVar(&conf.Base.BlockEventIndexingEnabled, "base.index-block-events", false, "enable block beginblocker and endblocker event indexing?")
 	// filter configs
 	cmd.PersistentFlags().StringVar(&conf.Base.FilterFile, "base.filter-file", "", "path to a file containing a JSON config of block event and message type filters to apply to beginblocker events, endblocker events and TX messages")
 	// other base setting
@@ -103,12 +101,12 @@ func (conf *IndexConfig) Validate() error {
 		return err
 	}
 
-	if !conf.Base.TransactionIndexingEnabled && !conf.Base.BlockEventIndexingEnabled {
-		return errors.New("must enable at least one of base.index-transactions or base.index-block-events")
+	if !conf.Base.TransactionIndexingEnabled {
+		return errors.New("must enable at least one of base.index-transactions")
 	}
 
 	// Check for required configs when base indexer is enabled
-	if conf.Base.TransactionIndexingEnabled || conf.Base.BlockEventIndexingEnabled {
+	if conf.Base.TransactionIndexingEnabled {
 		if conf.Base.StartBlock == 0 {
 			return errors.New("base.start-block must be set when index-chain is enabled")
 		}
