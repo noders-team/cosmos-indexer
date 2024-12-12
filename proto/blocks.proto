@@ -384,6 +384,7 @@ message VotesTransaction{
   string voter = 5;
   string option = 6;
   string weight = 7;
+  TxByHash tx = 8;
 }
 
 message GetVotesRequest{

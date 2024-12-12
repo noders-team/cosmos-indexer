@@ -3,6 +3,8 @@ package model
 import (
 	"time"
 
+	"github.com/noders-team/cosmos-indexer/db/models"
+
 	"github.com/shopspring/decimal"
 )
 
@@ -48,13 +50,14 @@ type TxSenderReceiver struct {
 }
 
 type VotesTransaction struct {
-	BlockHeight int64     `json:"block_height"`
-	Timestamp   time.Time `json:"timestamp"`
-	TxHash      string    `json:"tx_hash"`
-	ProposalID  int       `json:"proposal_id"`
-	Voter       string    `json:"voter"`
-	Option      string    `json:"option"`
-	Weight      string    `json:"weight"`
+	BlockHeight int64      `json:"block_height"`
+	Timestamp   time.Time  `json:"timestamp"`
+	TxHash      string     `json:"tx_hash"`
+	ProposalID  int        `json:"proposal_id"`
+	Voter       string     `json:"voter"`
+	Option      string     `json:"option"`
+	Weight      string     `json:"weight"`
+	Tx          *models.Tx `json:"tx"`
 }
 
 type TxEvents struct {

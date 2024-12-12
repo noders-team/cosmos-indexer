@@ -524,6 +524,7 @@ func (r *blocksServer) GetVotes(ctx context.Context, in *pb.GetVotesRequest) (*p
 			Option:      tx.Option,
 			Weight:      tx.Weight,
 			Time:        timestamppb.New(tx.Timestamp),
+			Tx:          r.txToProto(tx.Tx),
 		})
 	}
 

@@ -1149,6 +1149,14 @@ func (r *txs) GetVotes(ctx context.Context, accountAddress string, limit int64, 
 		}
 		voteTx.ProposalID = proposal
 
+		txByHash, _, err := r.Transactions(ctx, 1, 0, &TxsFilter{TxHash: &voteTx.TxHash})
+		if err != nil {
+			return nil, 0, err
+		}
+		if len(txByHash) > 0 {
+			voteTx.Tx = txByHash[0]
+		}
+
 		data = append(data, &voteTx)
 	}
 
