@@ -83,7 +83,7 @@ jobs:
               echo "Cosmos-indexer container removed."
             fi
             
-            # Pull the latest cosmos-explorer image
+            # Pull the latest cosmos-indexer image
             sudo docker pull ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}
 
             # Start a new cosmos-indexer container with environment variables
