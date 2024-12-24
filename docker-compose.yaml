@@ -60,49 +60,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "8888:8080"
-  indexer-fetcher-1:
-    restart: "always"
-    build:
-      context: .
-      dockerfile: Dockerfile
-    stop_grace_period: 10s
-    user: cosmos-indexer
-    depends_on:
-      postgres:
-        condition: service_healthy
-    links:
-      - postgres
-    networks:
-      vpcbr-2:
-        ipv4_address: 10.5.0.17
-    <<: *logging
-    command:
-      - /bin/sh
-      - -c
-      - |
-        cosmos-indexer index \
-        --log.pretty = true \
-        --log.level = info \
-        --base.mode fetcher \
-        --base.start-block 1 \
-        --base.end-block 10000 \
-        --base.throttling 2.005 \
-        --base.rpc-workers 2 \
-        --base.index-transactions true \
-        --base.mode-blocks-step 1000 \
-        --probe.rpc http://celestia-mainnet-consensus.itrocket.net:26657 \
-        --probe.account-prefix celestia \
-        --probe.chain-id celestia \
-        --probe.chain-name celestia \
-        --base.reindex true \
-        --database.host postgres \
-        --database.database postgres \
-        --database.user taxuser \
-        --database.password password \
-        --server.port 9002 \
-        --redis.addr redis:6379 \
-        --mongo.addr mongodb://admin:password@mongodb:27017 \
-        --mongo.db search_indexer
   indexer:
     restart: "always"
     build:
@@ -133,10 +90,10 @@ services:
       --base.throttling 2.005 \
       --base.rpc-workers 1 \
       --base.index-transactions true \
-      --probe.rpc http://celestia-mainnet-consensus.itrocket.net:26657 \
-      --probe.account-prefix celestia \
-      --probe.chain-id celestia \
-      --probe.chain-name celestia \
+      --probe.rpc https://og-testnet-rpc.itrocket.net  \
+      --probe.account-prefix 0g \
+      --probe.chain-id zgtendermint_16600-2 \
+      --probe.chain-name 0g \
       --database.host postgres \
       --database.database postgres \
       --database.user taxuser \
