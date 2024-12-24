@@ -625,12 +625,13 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 			}
 			tx.AuthInfo.FeeID = tx.AuthInfo.Fee.ID
 
-			for _, signerInfo := range tx.AuthInfo.SignerInfos {
+			for idx, signerInfo := range tx.AuthInfo.SignerInfos {
 				res := dbTransaction.Raw(`
 					INSERT INTO addresses (address)
 					VALUES (?)
 					ON CONFLICT (address) DO NOTHING
-					RETURNING id`, signerInfo.Address.Address).Scan(&signerInfo.Address.ID)
+					RETURNING id`, signerInfo.Address.Address).
+					Scan(&tx.AuthInfo.SignerInfos[idx].Address.ID)
 				if res.Error != nil {
 					config.Log.Warnf("Error getting/creating signerInfo.Address DB object %v %v", res.Error, signerInfo.Address)
 					err := dbTransaction.Rollback().Error
@@ -642,7 +643,7 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 				if res.RowsAffected == 0 {
 					if err := dbTransaction.
 						Raw(`SELECT id from addresses where address = ?`, signerInfo.Address.Address).
-						Scan(&signerInfo.Address.ID).Error; err != nil {
+						Scan(&tx.AuthInfo.SignerInfos[idx].Address.ID).Error; err != nil {
 						config.Log.Warnf("Error getting signerInfo.Address DB object %v %v", err, signerInfo.Address)
 					}
 				}
@@ -652,6 +653,7 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 					continue
 				}
 
+				uniqueAddress[signerInfo.Address.Address] = *tx.AuthInfo.SignerInfos[idx].Address
 				if err := dbTransaction.Raw(`
 					INSERT INTO tx_signer_info (address_id, mode_info, sequence)
 					VALUES (?, ?, ?)
@@ -733,12 +735,17 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 		if len(txesSlice) != 0 {
 			config.Log.Infof("TxesSlice size %d for block %d", len(txesSlice), block.Height)
 			for _, tx := range txesSlice {
+				tx.SignerAddresses = make([]models.Address, 0) //  TODO
+				tx.Fees = make([]models.Fee, 0)
+
 				err := dbTransaction.Clauses(clause.OnConflict{
 					Columns:   []clause.Column{{Name: "hash"}},
 					DoUpdates: clause.AssignmentColumns([]string{"code", "block_id"}),
 				}).FirstOrCreate(&tx).Error
 				if err != nil {
 					config.Log.Warn("Error getting/creating txes.", err)
+				} else {
+					config.Log.Infof("Tx %s created", tx.Hash)
 				}
 			}
 		}

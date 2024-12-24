@@ -813,46 +813,43 @@ func (idxr *Indexer) processBlocks(wg *sync.WaitGroup,
 			continue
 		}
 
-		/*
-			if blockData.IndexBlockEvents && !blockData.BlockEventRequestsFailed {
-				config.Log.Info("Parsing block events")
-				blockDBWrapper, err := core.ProcessRPCBlockResults(*indexer.cfg, block,
-					blockData.BlockResultsData,
-					indexer.customBeginBlockEventParserRegistry, indexer.customEndBlockEventParserRegistry)
-				if err != nil {
-					config.Log.Errorf("Failed to process block events during block %d event processing, adding to failed block events table", currentHeight)
-					failedBlockHandler(currentHeight, core.FailedBlockEventHandling, err)
-					err := dbTypes.UpsertFailedEventBlock(idxr.db, currentHeight, idxr.cfg.Probe.ChainID, idxr.cfg.Probe.ChainName)
-					if err != nil {
-						config.Log.Fatal("Failed to insert failed block event", err)
-					}
-				} else {
-					config.Log.Infof("Finished parsing block event data for block %d", currentHeight)
+		config.Log.Info("Parsing block events")
+		blockDBWrapper, err := core.ProcessRPCBlockResults(*indexer.cfg, block,
+			blockData.BlockResultsData,
+			indexer.customBeginBlockEventParserRegistry, indexer.customEndBlockEventParserRegistry)
+		if err != nil {
+			config.Log.Errorf("Failed to process block events during block %d event processing, adding to failed block events table", currentHeight)
+			failedBlockHandler(currentHeight, core.FailedBlockEventHandling, err)
+			err := dbTypes.UpsertFailedEventBlock(idxr.db, currentHeight, idxr.cfg.Probe.ChainID, idxr.cfg.Probe.ChainName)
+			if err != nil {
+				config.Log.Fatal("Failed to insert failed block event", err)
+			}
+		} else {
+			config.Log.Infof("Finished parsing block event data for block %d", currentHeight)
 
-					var beginBlockFilterError error
-					var endBlockFilterError error
-					if blockEventFilterRegistry.beginBlockEventFilterRegistry != nil && blockEventFilterRegistry.beginBlockEventFilterRegistry.NumFilters() > 0 {
-						blockDBWrapper.BeginBlockEvents, beginBlockFilterError = core.FilterRPCBlockEvents(blockDBWrapper.BeginBlockEvents, *blockEventFilterRegistry.beginBlockEventFilterRegistry)
-					}
+			var beginBlockFilterError error
+			var endBlockFilterError error
+			if blockEventFilterRegistry.beginBlockEventFilterRegistry != nil && blockEventFilterRegistry.beginBlockEventFilterRegistry.NumFilters() > 0 {
+				blockDBWrapper.BeginBlockEvents, beginBlockFilterError = core.FilterRPCBlockEvents(blockDBWrapper.BeginBlockEvents, *blockEventFilterRegistry.beginBlockEventFilterRegistry)
+			}
 
-					if blockEventFilterRegistry.endBlockEventFilterRegistry != nil && blockEventFilterRegistry.endBlockEventFilterRegistry.NumFilters() > 0 {
-						blockDBWrapper.EndBlockEvents, endBlockFilterError = core.FilterRPCBlockEvents(blockDBWrapper.EndBlockEvents, *blockEventFilterRegistry.endBlockEventFilterRegistry)
-					}
+			if blockEventFilterRegistry.endBlockEventFilterRegistry != nil && blockEventFilterRegistry.endBlockEventFilterRegistry.NumFilters() > 0 {
+				blockDBWrapper.EndBlockEvents, endBlockFilterError = core.FilterRPCBlockEvents(blockDBWrapper.EndBlockEvents, *blockEventFilterRegistry.endBlockEventFilterRegistry)
+			}
 
-					if beginBlockFilterError == nil && endBlockFilterError == nil {
-						blockEventsDataChan <- &blockEventsDBData{
-							blockDBWrapper: blockDBWrapper,
-						}
-					} else {
-						config.Log.Errorf("Failed to filter block events during block %d event processing, adding to failed block events table. Begin blocker filter error %s. End blocker filter error %s", currentHeight, beginBlockFilterError, endBlockFilterError)
-						failedBlockHandler(currentHeight, core.FailedBlockEventHandling, err)
-						err := dbTypes.UpsertFailedEventBlock(idxr.db, currentHeight, idxr.cfg.Probe.ChainID, idxr.cfg.Probe.ChainName)
-						if err != nil {
-							config.Log.Fatal("Failed to insert failed block event", err)
-						}
-					}
+			if beginBlockFilterError == nil && endBlockFilterError == nil {
+				blockEventsDataChan <- &blockEventsDBData{
+					blockDBWrapper: blockDBWrapper,
 				}
-			}*/
+			} else {
+				config.Log.Errorf("Failed to filter block events during block %d event processing, adding to failed block events table. Begin blocker filter error %s. End blocker filter error %s", currentHeight, beginBlockFilterError, endBlockFilterError)
+				failedBlockHandler(currentHeight, core.FailedBlockEventHandling, err)
+				err := dbTypes.UpsertFailedEventBlock(idxr.db, currentHeight, idxr.cfg.Probe.ChainID, idxr.cfg.Probe.ChainName)
+				if err != nil {
+					config.Log.Fatal("Failed to insert failed block event", err)
+				}
+			}
+		}
 
 		if blockData.IndexTransactions && !blockData.TxRequestsFailed {
 			config.Log.Info("Parsing transactions")
