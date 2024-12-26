@@ -595,6 +595,7 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 		var txesSlice []models.Tx
 		config.Log.Infof("Unique Txs size %d for block %d", len(uniqueTxes), block.Height)
 		for _, tx := range uniqueTxes {
+			// config.Log.Infof("===> Tx %s", tx.Hash)
 			// create auth_info address if it doesn't exist
 			if err := dbTransaction.Where(&tx.AuthInfo.Tip).FirstOrCreate(&tx.AuthInfo.Tip).Error; err != nil { //nolint:gosec
 				config.Log.Warnf("Error getting/creating Tip DB object. %v %v", err, tx.AuthInfo.Tip)
@@ -729,25 +730,22 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 				tx.Fees[feeIndex].PayerAddress = uniqueAddress[tx.Fees[feeIndex].PayerAddress.Address]
 			}
 
-			txesSlice = append(txesSlice, tx)
-		}
+			tx.SignerAddresses = make([]models.Address, 0) //  TODO
+			tx.Fees = make([]models.Fee, 0)                // TODO
 
-		if len(txesSlice) != 0 {
-			config.Log.Infof("TxesSlice size %d for block %d", len(txesSlice), block.Height)
-			for _, tx := range txesSlice {
-				tx.SignerAddresses = make([]models.Address, 0) //  TODO
-				tx.Fees = make([]models.Fee, 0)
-
-				err := dbTransaction.Clauses(clause.OnConflict{
-					Columns:   []clause.Column{{Name: "hash"}},
-					DoUpdates: clause.AssignmentColumns([]string{"code", "block_id"}),
-				}).FirstOrCreate(&tx).Error
-				if err != nil {
-					config.Log.Warn("Error getting/creating txes.", err)
-				} else {
-					config.Log.Infof("Tx %s created", tx.Hash)
-				}
+			// config.Log.Infof("Tx %s creating", tx.Hash)
+			err := dbTransaction.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "hash"}},
+				DoUpdates: clause.AssignmentColumns([]string{"code", "block_id"}),
+			}).Create(&tx).Error
+			if err != nil {
+				config.Log.Warn("Error getting/creating txes.", err)
+			} else {
+				config.Log.Infof("Tx %s created %d", tx.Hash, tx.ID)
+				// db.Commit() // TODO
 			}
+
+			txesSlice = append(txesSlice, tx)
 		}
 
 		for _, tx := range txesSlice {
@@ -801,13 +799,49 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 
 			if len(messagesSlice) != 0 {
 				for _, message := range messagesSlice {
-					if err := dbTransaction.Clauses(clause.OnConflict{
-						Columns:   []clause.Column{{Name: "tx_id"}, {Name: "message_index"}},
-						DoUpdates: clause.AssignmentColumns([]string{"message_type_id", "message_bytes"}),
-					}).FirstOrCreate(message).Error; err != nil {
-						config.Log.Error("Error getting/creating messages.", err)
-						return err
+					// saving message type
+					res := dbTransaction.Raw(`INSERT INTO message_types (message_type)
+						VALUES (?)
+					ON CONFLICT (message_type) DO NOTHING
+					RETURNING id`, message.MessageType.MessageType).
+						Scan(&message.MessageTypeID)
+					if res.Error != nil {
+						err := dbTransaction.Rollback().Error
+						if err != nil {
+							config.Log.Warnf("error during rollback %v", err)
+						}
+						continue
 					}
+					if res.RowsAffected == 0 {
+						if err := dbTransaction.
+							Raw(`SELECT id from message_types where message_type = ?`, message.MessageType.MessageType).
+							Scan(&message.MessageTypeID).Error; err != nil {
+						}
+					}
+
+					queryMsg := `
+						INSERT INTO messages (tx_id, message_type_id, message_index, message_bytes)
+						VALUES (?, ?, ?, ?)
+						ON CONFLICT (tx_id, message_index) DO NOTHING
+						RETURNING id`
+					res = dbTransaction.Raw(queryMsg, message.Tx.ID, message.MessageTypeID,
+						message.MessageIndex, message.MessageBytes).
+						Scan(&message.ID)
+					if res.Error != nil {
+						err := dbTransaction.Rollback().Error
+						if err != nil {
+							config.Log.Warnf("error during rollback %v", err)
+						}
+						continue
+					}
+					if res.RowsAffected == 0 {
+						if err := dbTransaction.
+							Raw(`SELECT id from messages where tx_id = ? and message_index =?`,
+								message.Tx.ID, message.MessageIndex).
+							Scan(&message.ID).Error; err != nil {
+						}
+					}
+					// log.Info().Msgf("Message created %d", message.ID)
 				}
 			}
 
@@ -823,13 +857,48 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 
 			if len(messagesEventsSlice) != 0 {
 				for _, messageEvent := range messagesEventsSlice {
-					if err := dbTransaction.Clauses(clause.OnConflict{
-						Columns:   []clause.Column{{Name: "message_id"}, {Name: "index"}},
-						DoUpdates: clause.AssignmentColumns([]string{"message_event_type_id"}),
-					}).FirstOrCreate(messageEvent).Error; err != nil {
-						config.Log.Error("Error getting/creating message events.", err)
-						return err
+					res := dbTransaction.Raw(`INSERT INTO message_event_types (type)
+						VALUES (?)
+					ON CONFLICT (type) DO NOTHING
+					RETURNING id`, messageEvent.MessageEventType.Type).
+						Scan(&messageEvent.MessageEventTypeID)
+					if res.Error != nil {
+						err := dbTransaction.Rollback().Error
+						if err != nil {
+							config.Log.Warnf("error during rollback %v", err)
+						}
+						continue
 					}
+					if res.RowsAffected == 0 {
+						if err := dbTransaction.
+							Raw(`SELECT id from message_event_types where type = ?`, messageEvent.MessageEventType.Type).
+							Scan(&messageEvent.MessageEventTypeID).Error; err != nil {
+						}
+					}
+
+					queryMsg := `
+						INSERT INTO message_events (index, message_id, message_event_type_id)
+						VALUES (?, ?, ?)
+						ON CONFLICT (message_id, index) DO NOTHING
+						RETURNING id`
+					res = dbTransaction.Raw(queryMsg, messageEvent.Index,
+						messageEvent.MessageID, messageEvent.MessageEventTypeID).
+						Scan(&messageEvent.ID)
+					if res.Error != nil {
+						err := dbTransaction.Rollback().Error
+						if err != nil {
+							config.Log.Warnf("error during rollback %v", err)
+						}
+						continue
+					}
+					if res.RowsAffected == 0 {
+						if err := dbTransaction.
+							Raw(`SELECT id from message_events where index = ? and message_id =?`,
+								messageEvent.Index, messageEvent.MessageID).
+							Scan(&messageEvent.ID).Error; err != nil {
+						}
+					}
+					// log.Info().Msgf("MessageEvent created %d", messageEvent.ID)
 				}
 			}
 
@@ -847,13 +916,50 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 
 			if len(messagesEventsAttributesSlice) != 0 {
 				for _, messageEventAttribute := range messagesEventsAttributesSlice {
-					if err := dbTransaction.Clauses(clause.OnConflict{
-						Columns:   []clause.Column{{Name: "message_event_id"}, {Name: "index"}},
-						DoUpdates: clause.AssignmentColumns([]string{"value", "message_event_attribute_key_id"}),
-					}).FirstOrCreate(messageEventAttribute).Error; err != nil {
-						config.Log.Error("Error getting/creating message event attributes.", err)
-						return err
+					res := dbTransaction.Raw(`INSERT INTO message_event_attribute_keys (key)
+						VALUES (?)
+					ON CONFLICT (key) DO NOTHING
+					RETURNING id`, messageEventAttribute.MessageEventAttributeKey.Key).
+						Scan(&messageEventAttribute.MessageEventAttributeKeyID)
+					if res.Error != nil {
+						err := dbTransaction.Rollback().Error
+						if err != nil {
+							config.Log.Warnf("error during rollback %v", err)
+						}
+						continue
 					}
+					if res.RowsAffected == 0 {
+						if err := dbTransaction.
+							Raw(`SELECT id from message_event_attribute_keys where key = ?`,
+								messageEventAttribute.MessageEventAttributeKey.Key).
+							Scan(&messageEventAttribute.MessageEventAttributeKeyID).Error; err != nil {
+						}
+					}
+
+					queryMsg := `
+						INSERT INTO message_event_attributes (message_event_id, value, index, message_event_attribute_key_id)
+						VALUES (?, ?, ?, ?)
+						ON CONFLICT (message_event_id, index) DO NOTHING
+						RETURNING id`
+					res = dbTransaction.Raw(queryMsg, messageEventAttribute.MessageEventID,
+						messageEventAttribute.Value, messageEventAttribute.Index,
+						messageEventAttribute.MessageEventAttributeKeyID).
+						Scan(&messageEventAttribute.ID)
+					if res.Error != nil {
+						err := dbTransaction.Rollback().Error
+						if err != nil {
+							config.Log.Warnf("error during rollback %v", err)
+						}
+						continue
+					}
+					if res.RowsAffected == 0 {
+						if err := dbTransaction.
+							Raw(`SELECT id from message_event_attributes where message_event_id = ? and index =?`,
+								messageEventAttribute.MessageEventID, messageEventAttribute.Index).
+							Scan(&messageEventAttribute.ID).Error; err != nil {
+						}
+					}
+					// log.Info().Msgf("messageEventAttribute created %d", messageEventAttribute.ID)
 				}
 			}
 		}

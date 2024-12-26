@@ -85,12 +85,12 @@ services:
       cosmos-indexer index \
       --log.pretty = true \
       --log.level = info \
-      --base.start-block 2480035 \
+      --base.start-block 2000000 \
       --base.end-block -1 \
       --base.throttling 2.005 \
       --base.rpc-workers 1 \
       --base.index-transactions true \
-      --probe.rpc https://og-testnet-rpc.itrocket.net  \
+      --probe.rpc http://8.209.114.109:26657  \
       --probe.account-prefix 0g \
       --probe.chain-id zgtendermint_16600-2 \
       --probe.chain-name 0g \

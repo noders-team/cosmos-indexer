@@ -932,6 +932,10 @@ func (idxr *Indexer) doDBUpdates(wg *sync.WaitGroup,
 			dbWrites++
 
 			config.Log.Info(fmt.Sprintf("Indexing %v TXs from block %d", len(data.txDBWrappers), data.block.Height))
+			for _, txs := range data.txDBWrappers {
+				config.Log.Info(fmt.Sprintf("Indexing TX %s", txs.Tx.Hash))
+			}
+
 			_, _, err := dbTypes.IndexNewBlock(idxr.db, data.block, data.txDBWrappers, *idxr.cfg)
 			if err != nil {
 				// Do a single reattempt on failure
@@ -955,8 +959,8 @@ func (idxr *Indexer) doDBUpdates(wg *sync.WaitGroup,
 				}
 			}
 
-			for _, tx := range data.txDBWrappers {
-				transaction := tx.Tx
+			for _, txDb := range data.txDBWrappers {
+				transaction := txDb.Tx
 
 				transaction.Block = data.block
 				res, err := txRepo.GetSenderAndReceiver(context.Background(), transaction.Hash)
