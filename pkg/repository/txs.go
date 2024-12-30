@@ -1086,7 +1086,7 @@ order by messages.message_index, message_events.index, message_event_attributes.
 	for rows.Next() {
 		var event model.TxEvents
 		if err = rows.Scan(&event.MessageType, &event.EventIndex, &event.Type, &event.Index, &event.Value, &event.Key); err != nil {
-			log.Err(err).Msgf("error scanning row in GetEvents, ignoring")
+			// log.Err(err).Msgf("error scanning row in GetEvents, ignoring") TODO
 			continue
 		}
 		data = append(data, &event)
@@ -1115,7 +1115,7 @@ order by txes.message_type_index, txes.message_event_attr_index`
 	for rows.Next() {
 		var event model.TxEvents
 		if err = rows.Scan(&event.MessageType, &event.EventIndex, &event.Type, &event.Index, &event.Value, &event.Key); err != nil {
-			log.Err(err).Msgf("error scanning row in GetEvents, ignoring")
+			log.Err(err).Msgf("error scanning row in GetEventsV2, ignoring")
 			continue
 		}
 		data = append(data, &event)
