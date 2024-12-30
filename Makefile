@@ -31,9 +31,6 @@ install: go.sum
 up:
 	docker-compose up --build
 
-build:
-	go build -o bin/cosmos-indexer .
-
 clean:
 	rm -rf build
 
@@ -52,3 +49,21 @@ lint: ## Run golangci-linter
 .PHONY: format
 format: ## Formats the code with gofumpt
 	find . -name '*.go' -type f -not -path "./vendor*" -not -path "*.git*" -not -path "./client/docs/*" | xargs gofumpt -w
+
+build_0g:
+	cp -f go.mod.0g go.mod
+	go mod tidy
+	go mod vendor
+	go build -o bin/cosmos-indexer .
+
+build_cel:
+	cp -f go.mod.0g go.mod
+	go mod tidy
+	go mod vendor
+	go build -o bin/cosmos-indexer .
+
+build:
+	cp -f go.mod.or go.mod
+	go mod tidy
+	go mod vendor
+	go build -o bin/cosmos-indexer .
