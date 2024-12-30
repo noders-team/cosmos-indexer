@@ -57,7 +57,7 @@ build_0g:
 	go build -o bin/cosmos-indexer .
 
 build_cel:
-	cp -f go.mod.0g go.mod
+	cp -f go.mod.cel go.mod
 	go mod tidy
 	go mod vendor
 	go build -o bin/cosmos-indexer .
