@@ -9,6 +9,15 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        environment:
+          - celestia
+
+    environment: ${{ matrix.environment }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -19,20 +28,26 @@ jobs:
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+      - name: Choose go.mod file
+        run: |
+          GO_MOD_FILE=${{ vars.GO_MOD_FILE || 'go.mod.or' }}
+          mv $GO_MOD_FILE go.mod
+
       - name: Build Docker Image
-        run: sudo docker build -t ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }} --build-arg TARGETPLATFORM=linux/amd64 .
+        run: sudo docker build -t ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }} --build-arg TARGETPLATFORM=linux/amd64 .
 
       - name: Push Docker Image
-        run: sudo docker push ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}
+        run: sudo docker push ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }}
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
 
     strategy:
-      matrix:
-        environment: [ 'celestia', 'nillion-testnet-prod' ]
       fail-fast: false
+      matrix:
+        environment:
+          - celestia
 
     environment: ${{ matrix.environment }}
 
@@ -84,14 +99,14 @@ jobs:
             fi
             
             # Pull the latest cosmos-indexer image
-            sudo docker pull ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}
+            sudo docker pull ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }}
 
             # Start a new cosmos-indexer container with environment variables
             sudo docker run -d --name cosmos-indexer \
               -p 127.0.0.1:9012:9012 \
               --restart unless-stopped \
               --network indexer_network \
-              ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }} \
+              ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }} \
               /bin/sh -c "cosmos-indexer index \
                 --log.pretty=true \
                 --log.level=info \
