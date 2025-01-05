@@ -9,6 +9,17 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        environment:
+          - celestia-prod
+          - 0g-testnet-prod
+          - nillion-testnet-prod
+
+    environment: ${{ matrix.environment }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -19,20 +30,28 @@ jobs:
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+      - name: Choose go.mod file
+        run: |
+          GO_MOD_FILE=${{ vars.GO_MOD_FILE || 'go.mod.or' }}
+          mv $GO_MOD_FILE go.mod
+
       - name: Build Docker Image
-        run: sudo docker build -t ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }} --build-arg TARGETPLATFORM=linux/amd64 .
+        run: sudo docker build -t ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }} --build-arg TARGETPLATFORM=linux/amd64 .
 
       - name: Push Docker Image
-        run: sudo docker push ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}
+        run: sudo docker push ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }}
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
 
     strategy:
-      matrix:
-        environment: [ 'celestia-prod' ]
       fail-fast: false
+      matrix:
+        environment:
+          - celestia-prod
+          - 0g-testnet-prod
+          - nillion-testnet-prod
 
     environment: ${{ matrix.environment }}
 
@@ -47,36 +66,13 @@ jobs:
           script: |
             # Docker Login on the remote server
             echo ${{ secrets.GITHUB_TOKEN }} | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            
-            # Check if the Docker network 'indexer_network' exists, and create it if not
-            if [ $(sudo docker network ls | grep indexer_network | wc -l) -eq 0 ]; then
-              sudo docker network create --driver=bridge indexer_network
-            else
-              echo "Network 'indexer_network' already exists."
-            fi
-
-            # Check if the Postgres container is running, and start it if not
-            if [ $(sudo docker ps -a --filter "name=^postgres_indexer$" --format "{{.Names}}" | wc -l) -eq 0 ]; then
-              sudo docker run -d --name postgres_indexer \
-                --restart unless-stopped \
-                --shm-size=1g \
-                -v postgres_indexer:/var/lib/postgresql/data \
-                -e POSTGRES_USER=${{ secrets.POSTGRES_USER }} \
-                -e POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} \
-                -e POSTGRES_DB=postgres \
-                -p 5432:5432 \
-                --network indexer_network \
-                postgres:15-alpine
-            else
-              echo "Postgres container is already running."
-            fi
 
             # Check if the Redis container is running, and start it if not
             if [ $(sudo docker ps -a --filter "name=^redis$" --format "{{.Names}}" | wc -l) -eq 0 ]; then
-              echo "client-output-buffer-limit pubsub 51200mb 51200mb 60" > redis.conf
+              echo "client-output-buffer-limit pubsub 20480mb 20480mb 60" > redis.conf
               sudo docker run -d --name redis \
                 --restart unless-stopped \
-                -p 6379:6379 \
+                -p 127.0.0.1:6379:6379 \
                 --network indexer_network \
                 -v ./redis.conf:/usr/local/etc/redis/redis.conf \
                 redis redis-server /usr/local/etc/redis/redis.conf
@@ -93,7 +89,7 @@ jobs:
                 -e MONGO_INITDB_ROOT_USERNAME=${{ secrets.MONGO_USER }} \
                 -e MONGO_INITDB_ROOT_PASSWORD=${{ secrets.MONGO_PASSWORD }} \
                 -v mongo_indexer:/data/db \
-                -p 27017:27017 \
+                -p 127.0.0.1:27017:27017 \
                 --network indexer_network \
                 mongo:5.0.2
             else
@@ -106,22 +102,22 @@ jobs:
               echo "Cosmos-indexer container removed."
             fi
             
-            # Pull the latest cosmos-explorer image
-            sudo docker pull ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}
+            # Pull the latest cosmos-indexer image
+            sudo docker pull ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }}
 
             # Start a new cosmos-indexer container with environment variables
             sudo docker run -d --name cosmos-indexer \
-              -p 9012:9012 \
+              -p 127.0.0.1:9012:9012 \
               --restart unless-stopped \
               --network indexer_network \
-              ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }} \
+              ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }} \
               /bin/sh -c "cosmos-indexer index \
                 --log.pretty=true \
                 --log.level=info \
                 --base.start-block=${{ vars.BASE_START_BLOCK }} \
                 --base.end-block=${{ vars.BASE_END_BLOCK || -1 }} \
                 --base.throttling=${{ vars.BASE_THROTTLING || 2.005 }} \
-                --base.rpc-workers=${{ vars.BASE_RPC_WORKERS || 10 }} \
+                --base.rpc-workers=${{ vars.BASE_RPC_WORKERS || 1 }} \
                 --base.index-transactions=${{ vars.BASE_INDEX_TRANSACTIONS || true }} \
                 --base.reindex=${{ vars.BASE_REINDEX || false }} \
                 --base.mode-blocks-step=${{ vars.BASE_GENESIS_BLOCKS_STEP || 5000}} \
@@ -129,8 +125,8 @@ jobs:
                 --probe.account-prefix=${{ vars.PROBE_ACCOUNT_PREFIX }} \
                 --probe.chain-id=${{ vars.PROBE_CHAIN_ID }} \
                 --probe.chain-name=${{ vars.PROBE_CHAIN_NAME }} \
-                --database.host=postgres_indexer \
-                --database.database=postgres \
+                --database.host=${{ vars.POSTGRES_HOST || 'postgres' }} \
+                --database.database=${{ vars.POSTGRES_DATABASE || 'indexer' }} \
                 --database.user=${{ secrets.POSTGRES_USER }} \
                 --database.password=${{ secrets.POSTGRES_PASSWORD }} \
                 --server.port=9002 \

@@ -223,24 +223,6 @@ func (w *blockRPCWorker) FetchBlock(rpcClient rpc.URIClient, block *EnqueueData)
 		retryMaxWait = w.cfg.Base.RequestRetryMaxWait
 	}
 
-	/*
-		if block.IndexBlockEvents {
-			bresults, err := rpc.GetBlockResultWithRetry(rpcClient,
-				block.Height, retryAttempts, retryMaxWait)
-
-			if err != nil {
-				config.Log.Errorf("Error getting block results for block %v from RPC. Err: %v", block, err)
-				err := dbTypes.UpsertFailedEventBlock(w.db, block.Height, w.chainStringID, w.cfg.Probe.ChainName)
-				if err != nil {
-					config.Log.Fatal("Failed to insert failed block event", err)
-				}
-				currentHeightIndexerData.BlockResultsData = nil
-				currentHeightIndexerData.BlockEventRequestsFailed = true
-			} else {
-				currentHeightIndexerData.BlockResultsData = bresults
-			}
-		}*/
-
 	if block.IndexTransactions {
 		txsEventResp, err := w.rpcClient.GetTxsByBlockHeight(block.Height)
 
