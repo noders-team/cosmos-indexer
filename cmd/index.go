@@ -932,10 +932,6 @@ func (idxr *Indexer) doDBUpdates(wg *sync.WaitGroup,
 			dbWrites++
 
 			config.Log.Info(fmt.Sprintf("Indexing %v TXs from block %d", len(data.txDBWrappers), data.block.Height))
-			for _, txs := range data.txDBWrappers {
-				config.Log.Info(fmt.Sprintf("Indexing TX %s", txs.Tx.Hash))
-			}
-
 			_, _, err := dbTypes.IndexNewBlock(idxr.db, data.block, data.txDBWrappers, *idxr.cfg)
 			if err != nil {
 				// Do a single reattempt on failure

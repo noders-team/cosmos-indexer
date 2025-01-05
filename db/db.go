@@ -701,18 +701,12 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 				tx.Fees[feeIndex].PayerAddress = uniqueAddress[tx.Fees[feeIndex].PayerAddress.Address]
 			}
 
-			// tx.SignerAddresses = make([]models.Address, 0) //  TODO
-			tx.Fees = make([]models.Fee, 0) // TODO
-
-			// config.Log.Infof("Tx %s creating", tx.Hash)
 			err := dbTransaction.Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "hash"}},
 				DoUpdates: clause.AssignmentColumns([]string{"code", "block_id"}),
 			}).Create(&tx).Error
 			if err != nil {
 				config.Log.Warn("Error getting/creating txes.", err)
-			} else {
-				config.Log.Infof("Tx %s created %d", tx.Hash, tx.ID)
 			}
 
 			txesSlice = append(txesSlice, tx)
