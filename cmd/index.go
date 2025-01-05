@@ -524,7 +524,7 @@ func runIndexer(ctx context.Context, idxr *Indexer, startBlock, endBlock int64) 
 
 	chBlocks := make(chan *model.BlockInfo, 1000)
 	defer close(chBlocks)
-	chTxs := make(chan *models.Tx, 1000)
+	chTxs := make(chan *model.Tx, 1000)
 	defer close(chTxs)
 
 	cacheConsumer := consumer.NewCacheConsumer(cache, chBlocks, chTxs, cache)
@@ -905,7 +905,7 @@ func (idxr *Indexer) toBlockInfo(in models.Block) *model.BlockInfo {
 func (idxr *Indexer) doDBUpdates(wg *sync.WaitGroup,
 	txDataChan chan *dbData,
 	blockEventsDataChan chan *blockEventsDBData,
-	txsCh chan *models.Tx,
+	txsCh chan *model.Tx,
 	txRepo repository.Txs,
 	cache repository.PubSubCache,
 ) {
@@ -967,7 +967,7 @@ func (idxr *Indexer) doDBUpdates(wg *sync.WaitGroup,
 				}
 
 				// TODO not the best place
-				go func(tx models.Tx) {
+				go func(tx model.Tx) {
 					events, err := txRepo.GetEvents(context.Background(), tx.ID)
 					if err != nil {
 						log.Err(err).Msgf("Failed to get events for tx %s", tx.Hash)
@@ -1027,13 +1027,13 @@ func (idxr *Indexer) doDBUpdates(wg *sync.WaitGroup,
 	}
 }
 
-func (idxr *Indexer) saveAggregatedEventValues(ctx context.Context, tx *models.Tx, events []*model.TxEvents) error {
+func (idxr *Indexer) saveAggregatedEventValues(ctx context.Context, tx *model.Tx, events []*model.TxEvents) error {
 	if len(events) == 0 {
 		return nil
 	}
 
 	for _, event := range events {
-		var txEvents models.TxEventsValsAggregated
+		var txEvents model.TxEventsValsAggregated
 		txEvents.TxHash = tx.Hash
 		txEvents.MsgType = event.MessageType
 		txEvents.EvAttrValue = fmt.Sprintf("%x", md5.Sum([]byte(strings.ToLower(event.Value))))
@@ -1053,13 +1053,13 @@ func (idxr *Indexer) saveAggregatedEventValues(ctx context.Context, tx *models.T
 	return nil
 }
 
-func (idxr *Indexer) saveAggregatedEvents(ctx context.Context, tx *models.Tx, events []*model.TxEvents) error {
+func (idxr *Indexer) saveAggregatedEvents(ctx context.Context, tx *model.Tx, events []*model.TxEvents) error {
 	if len(events) == 0 {
 		return nil
 	}
 
 	for _, event := range events {
-		var txEvents models.TxEventsAggregated
+		var txEvents model.TxEventsAggregated
 
 		txEvents.TxHash = tx.Hash
 		txEvents.MessageType = event.MessageType
@@ -1083,12 +1083,12 @@ func (idxr *Indexer) saveAggregatedEvents(ctx context.Context, tx *models.Tx, ev
 	return nil
 }
 
-func (idxr *Indexer) saveAggregated(ctx context.Context, txRepo repository.Txs, tx *models.Tx, events []*model.TxEvents) error {
+func (idxr *Indexer) saveAggregated(ctx context.Context, txRepo repository.Txs, tx *model.Tx, events []*model.TxEvents) error {
 	if len(events) == 0 {
 		return nil
 	}
 
-	var txDelegateAggregated models.TxDelegateAggregated
+	var txDelegateAggregated model.TxDelegateAggregated
 
 	txDelegateAggregated.Hash = tx.Hash
 	txDelegateAggregated.Timestamp = tx.Timestamp

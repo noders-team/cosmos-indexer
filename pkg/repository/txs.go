@@ -24,21 +24,21 @@ type Txs interface {
 	ChartTxByDay(ctx context.Context, from time.Time, to time.Time) ([]*model.TxsByDay, error)
 	TransactionsPerPeriod(ctx context.Context, to time.Time) (allTx, all24H, all48H, all30D int64, err error)
 	VolumePerPeriod(ctx context.Context, to time.Time) (decimal.Decimal, decimal.Decimal, error)
-	Transactions(ctx context.Context, limit int64, offset int64, filter *TxsFilter) ([]*models.Tx, int64, error)
+	Transactions(ctx context.Context, limit int64, offset int64, filter *TxsFilter) ([]*model.Tx, int64, error)
 	TransactionRawLog(ctx context.Context, hash string) ([]byte, error)
-	TransactionSigners(ctx context.Context, hash string) ([]*models.SignerInfo, error)
-	Messages(ctx context.Context, hash string) ([]*models.Message, error)
+	TransactionSigners(ctx context.Context, hash string) ([]*model.SignerInfo, error)
+	Messages(ctx context.Context, hash string) ([]*model.Message, error)
 	GetSenderAndReceiver(ctx context.Context, hash string) (*model.TxSenderReceiver, error)
 	GetSenderAndReceiverV2(ctx context.Context, hash string) (*model.TxSenderReceiver, error)
 	GetWalletsCount(ctx context.Context) (*model.TotalWallets, error)
 	ChartTransactionsByHour(ctx context.Context, to time.Time) (*model.TxByHourWithCount, error)
 	ChartTransactionsVolume(ctx context.Context, to time.Time) ([]*model.TxVolumeByHour, error)
 	GetPowerEvents(ctx context.Context, accountAddress string,
-		limit int64, offset int64) ([]*models.Tx, int64, error)
+		limit int64, offset int64) ([]*model.Tx, int64, error)
 	GetValidatorHistory(ctx context.Context, accountAddress string,
-		limit int64, offset int64) ([]*models.Tx, int64, error)
+		limit int64, offset int64) ([]*model.Tx, int64, error)
 	TransactionsByEventValue(ctx context.Context, values []string, messageType []string, includeEvents bool,
-		limit int64, offset int64) ([]*models.Tx, int64, error)
+		limit int64, offset int64) ([]*model.Tx, int64, error)
 	GetVotes(ctx context.Context, accountAddress string, limit int64, offset int64) ([]*model.VotesTransaction, int64, error)
 	GetVotesByAccounts(ctx context.Context, accounts []string, excludeAccounts bool, voteOption string,
 		proposalID int, byAccAddress *string, limit int64, offset int64, sortBy *model.SortBy) ([]*model.VotesTransaction, int64, error)
@@ -51,7 +51,7 @@ type Txs interface {
 	UpdateViews(ctx context.Context) error
 	ExtractNumber(value string) (decimal.Decimal, string, error)
 	DelegatesByValidator(ctx context.Context, from, to time.Time, valoperAddress string,
-		limit int64, offset int64) (data []*models.Tx, totalSum *model.Denom, all int64, err error)
+		limit int64, offset int64) (data []*model.Tx, totalSum *model.Denom, all int64, err error)
 	ProposalDepositors(ctx context.Context, proposalID int,
 		sortBy *model.SortBy, limit int64, offset int64) ([]*model.ProposalDeposit, int64, error)
 	TotalRewardByAccount(ctx context.Context, account string) ([]*model.DecCoin, error)
@@ -228,7 +228,7 @@ func (r *txs) volumePerPeriod(ctx context.Context, from, to time.Time) (decimal.
 	return total, nil
 }
 
-func (r *txs) TransactionSigners(ctx context.Context, txHash string) ([]*models.SignerInfo, error) {
+func (r *txs) TransactionSigners(ctx context.Context, txHash string) ([]*model.SignerInfo, error) {
 	querySignerInfos := `
 						select
 							txi.signer_info_id,
@@ -242,14 +242,14 @@ func (r *txs) TransactionSigners(ctx context.Context, txHash string) ([]*models.
 							inner join tx_signer_info txnf on txi.signer_info_id = txnf.id
 							inner join addresses addr on txnf.address_id = addr.id
 						where txes.hash = $1`
-	signerInfos := make([]*models.SignerInfo, 0)
+	signerInfos := make([]*model.SignerInfo, 0)
 	rowsSigners, err := r.db.Query(ctx, querySignerInfos, txHash)
 	if err != nil {
 		log.Err(err).Msgf("querySignerInfos error")
 		return nil, err
 	}
 	for rowsSigners.Next() {
-		var in models.SignerInfo
+		var in model.SignerInfo
 		var addr models.Address
 
 		errScan := rowsSigners.Scan(&in.ID, &addr.ID, &in.ModeInfo, &in.Sequence, &addr.Address)
@@ -283,7 +283,7 @@ func (r *txs) TransactionRawLog(ctx context.Context, hash string) ([]byte, error
 	return rawLog, nil
 }
 
-func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filter *TxsFilter) ([]*models.Tx, int64, error) {
+func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filter *TxsFilter) ([]*model.Tx, int64, error) {
 	dialect := goqu.Select(
 		goqu.I("txes.id").As("tx_id"),
 		goqu.I("txes.signatures").As("signatures"),
@@ -363,14 +363,14 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 	}
 	log.Debug().Msgf("=> TransactionsByEventValue ==> transaction main finish: %s", time.Since(startTime).String())
 
-	result := make([]*models.Tx, 0)
+	result := make([]*model.Tx, 0)
 	if rows != nil {
 		for rows.Next() {
-			var tx models.Tx
-			var authInfo models.AuthInfo
-			var authInfoFee models.AuthInfoFee
-			var authInfoTip models.Tip
-			var txResponse models.TxResponse
+			var tx model.Tx
+			var authInfo model.AuthInfo
+			var authInfoFee model.AuthInfoFee
+			var authInfoTip model.Tip
+			var txResponse model.TxResponse
 			signatures := make([][]byte, 0)
 			extensionsOptions := make([]string, 0)
 			nonCriticalExtensionOptions := make([]string, 0)
@@ -405,7 +405,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 			log.Debug().Msgf("=> TransactionsByEventValue ==> transaction loop block: %s", time.Since(startTime).String())
 
 			startTime = time.Now()
-			var fees []models.Fee
+			var fees []model.Fee
 			if fees, err = r.feesByTransaction(ctx, tx.ID); err != nil {
 				log.Err(err).Msgf("error in feesByTransaction")
 			}
@@ -461,7 +461,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 	return result, allTx, nil
 }
 
-func (r *txs) feesByTransaction(ctx context.Context, txID uint) ([]models.Fee, error) {
+func (r *txs) feesByTransaction(ctx context.Context, txID uint) ([]model.Fee, error) {
 	feesQ := `select fs.amount, dm.base, a.address from fees fs 
     				left join public.addresses a on fs.payer_address_id = a.id
     				left join denoms dm on fs.denomination_id = dm.id
@@ -471,9 +471,9 @@ func (r *txs) feesByTransaction(ctx context.Context, txID uint) ([]models.Fee, e
 		log.Err(err).Msgf("feesRes error")
 		return nil, err
 	}
-	feesRes := make([]models.Fee, 0)
+	feesRes := make([]model.Fee, 0)
 	for rowsFees.Next() {
-		var in models.Fee
+		var in model.Fee
 		var denom models.Denom
 		var address models.Address
 
@@ -512,7 +512,7 @@ func (r *txs) blockInfo(ctx context.Context, blockID uint) (*models.Block, error
 	return &block, nil
 }
 
-func (r *txs) Messages(ctx context.Context, hash string) ([]*models.Message, error) {
+func (r *txs) Messages(ctx context.Context, hash string) ([]*model.Message, error) {
 	query := `select txes.id,
        messages.message_index,
        messages.message_bytes,
@@ -526,7 +526,7 @@ func (r *txs) Messages(ctx context.Context, hash string) ([]*models.Message, err
 		log.Err(err).Msgf("rows error")
 		return nil, err
 	}
-	res := make([]*models.Message, 0)
+	res := make([]*model.Message, 0)
 	for rows.Next() {
 		var txID uint
 		var messageIndex int
@@ -538,11 +538,11 @@ func (r *txs) Messages(ctx context.Context, hash string) ([]*models.Message, err
 			return nil, err
 		}
 
-		res = append(res, &models.Message{
+		res = append(res, &model.Message{
 			TxID:         txID,
 			MessageIndex: messageIndex,
 			MessageBytes: messageBytes,
-			MessageType:  models.MessageType{MessageType: messageType},
+			MessageType:  model.MessageType{MessageType: messageType},
 		})
 	}
 	return res, nil
@@ -826,7 +826,7 @@ func (r *txs) TxCountByAccounts(ctx context.Context, accounts []string) ([]*mode
 	return data, nil
 }
 
-func (r *txs) GetValidatorHistory(ctx context.Context, accountAddress string, limit int64, offset int64) ([]*models.Tx, int64, error) {
+func (r *txs) GetValidatorHistory(ctx context.Context, accountAddress string, limit int64, offset int64) ([]*model.Tx, int64, error) {
 	types := []string{
 		"/cosmos.slashing.v1beta1.MsgUnjail",
 		"/cosmos.staking.v1beta1.MsgEditValidator",
@@ -835,7 +835,7 @@ func (r *txs) GetValidatorHistory(ctx context.Context, accountAddress string, li
 	return r.getTransactionsByTypes(ctx, accountAddress, types, limit, offset)
 }
 
-func (r *txs) GetPowerEvents(ctx context.Context, accountAddress string, limit int64, offset int64) ([]*models.Tx, int64, error) {
+func (r *txs) GetPowerEvents(ctx context.Context, accountAddress string, limit int64, offset int64) ([]*model.Tx, int64, error) {
 	types := []string{
 		"/cosmos.staking.v1beta1.MsgDelegate",
 		"/cosmos.staking.v1beta1.MsgUndelegate",
@@ -845,7 +845,7 @@ func (r *txs) GetPowerEvents(ctx context.Context, accountAddress string, limit i
 	return r.getTransactionsByTypes(ctx, accountAddress, types, limit, offset)
 }
 
-func (r *txs) getTransactionsByTypes(ctx context.Context, accountAddress string, types []string, limit int64, offset int64) ([]*models.Tx, int64, error) {
+func (r *txs) getTransactionsByTypes(ctx context.Context, accountAddress string, types []string, limit int64, offset int64) ([]*model.Tx, int64, error) {
 	queryEvents := `select txes.hash
 		from txes
 				 left join blocks on txes.block_id = blocks.id
@@ -865,7 +865,7 @@ func (r *txs) getTransactionsByTypes(ctx context.Context, accountAddress string,
 	}
 	defer rows.Close()
 
-	data := make([]*models.Tx, 0)
+	data := make([]*model.Tx, 0)
 	for rows.Next() {
 		var txHash string
 		if err = rows.Scan(&txHash); err != nil {
@@ -1001,7 +1001,7 @@ func (r *txs) transactionsByEventValueTotals(ctx context.Context,
 
 func (r *txs) TransactionsByEventValue(ctx context.Context, values []string, messageType []string, includeEvents bool,
 	limit int64, offset int64,
-) ([]*models.Tx, int64, error) {
+) ([]*model.Tx, int64, error) {
 	startTime := time.Now()
 	log.Info().Msgf("=> start TransactionsByEventValue %s", startTime.String())
 
@@ -1149,6 +1149,14 @@ func (r *txs) GetVotes(ctx context.Context, accountAddress string, limit int64, 
 		}
 		voteTx.ProposalID = proposal
 
+		txByHash, _, err := r.Transactions(ctx, 1, 0, &TxsFilter{TxHash: &voteTx.TxHash})
+		if err != nil {
+			return nil, 0, err
+		}
+		if len(txByHash) > 0 {
+			voteTx.Tx = txByHash[0]
+		}
+
 		data = append(data, &voteTx)
 	}
 
@@ -1293,7 +1301,7 @@ group by txs.denom;`
 
 func (r *txs) DelegatesByValidator(ctx context.Context, from, to time.Time, valoperAddress string,
 	limit int64, offset int64,
-) (data []*models.Tx, totalSum *model.Denom, all int64, err error) {
+) (data []*model.Tx, totalSum *model.Denom, all int64, err error) {
 	query := `SELECT hash from tx_delegate_aggregateds 
             where date(timestamp) BETWEEN date($1) and date($2) and validator=$3 
             LIMIT $4::integer OFFSET $5::integer;`
