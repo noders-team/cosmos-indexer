@@ -14,9 +14,10 @@ jobs:
       fail-fast: false
       matrix:
         environment:
-          # - celestia-prod
+          - celestia-prod
           - 0g-testnet-prod
           - nillion-testnet-prod
+          - story-testnet-prod
 
     environment: ${{ matrix.environment }}
 
@@ -54,9 +55,10 @@ jobs:
       fail-fast: false
       matrix:
         environment:
-          # - celestia-prod
+          - celestia-prod
           - 0g-testnet-prod
           - nillion-testnet-prod
+          - story-testnet-prod
 
     environment: ${{ matrix.environment }}
 
