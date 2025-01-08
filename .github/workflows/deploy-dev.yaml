@@ -130,5 +130,8 @@ jobs:
                 --mongo.addr=mongodb://${{ secrets.MONGO_USER }}:${{ secrets.MONGO_PASSWORD }}@mongo:27017 \
                 --mongo.db=mongo"
 
+            # Restart cosmos-explorer container
+            sudo docker restart cosmos-explorer
+
             # Clean up unused Docker resources
             sudo docker system prune -f
