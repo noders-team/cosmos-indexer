@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"sort"
 	"time"
 
@@ -210,7 +209,7 @@ func (r *blocks) TotalBlocks(ctx context.Context, to time.Time) (*model.TotalBlo
 				INNER JOIN blocks ON txes.block_id = blocks.id
 				WHERE blocks.time_stamp BETWEEN $1 AND $2`
 	row = r.db.QueryRow(ctx, query, from, to.UTC())
-	var feeSum big.Int
+	var feeSum decimal.Decimal
 	if err = row.Scan(&feeSum); err != nil {
 		log.Err(err).Msgf("row.Scan(&feeSum)")
 		return nil, err
@@ -221,7 +220,7 @@ func (r *blocks) TotalBlocks(ctx context.Context, to time.Time) (*model.TotalBlo
 		Count24H:    count24H,
 		Count48H:    count48H,
 		BlockTime:   int64(blockTime),
-		TotalFee24H: decimal.RequireFromString(feeSum.String()),
+		TotalFee24H: feeSum,
 	}, nil
 }
 

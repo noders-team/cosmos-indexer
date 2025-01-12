@@ -330,7 +330,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 			goqu.On(goqu.Ex{"txes.block_id": goqu.I("blocks.id")}),
 		)
 
-	log.Info().Msgf("=> Transactions ==> filter.TxHashes: %~v", filter)
+	log.Info().Msgf("=> Transactions ==> filter.TxHashes: %v", filter)
 	if filter != nil {
 		if filter.TxBlockHeight != nil {
 			dialect = dialect.Where(goqu.I("blocks.height").Eq(*filter.TxBlockHeight))
