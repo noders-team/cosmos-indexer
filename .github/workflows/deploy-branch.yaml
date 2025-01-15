@@ -18,6 +18,7 @@ on:
           - 0g-testnet-prod
           - nillion-testnet-prod
           - story-testnet-prod
+          - babylon-testnet-prod
 
 jobs:
   build:

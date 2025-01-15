@@ -18,6 +18,7 @@ jobs:
           - 0g-testnet-prod
           - nillion-testnet-prod
           - story-testnet-prod
+          - babylon-testnet-prod
 
     environment: ${{ matrix.environment }}
 
