@@ -1,40 +1,62 @@
-name: Deploy Indexer - PROD (new database)
+name: Deploy Indexer - PROD - From Branch
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - dev
+    inputs:
+      branch:
+        description: 'Branch to build from'
+        required: true
+        default: 'main'
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'celestia'
+        type: choice
+        options:
+          - celestia
+          - celestia-prod
+          - 0g-testnet-prod
+          - nillion-testnet-prod
+          - story-testnet-prod
+          - babylon-testnet-prod
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    environment: ${{ github.event.inputs.environment }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.event.inputs.branch }}
 
       - name: Docker Login
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+      - name: Choose go.mod file
+        run: |
+          GO_MOD_FILE=${{ vars.GO_MOD_FILE || 'go.mod.or' }}
+          mv $GO_MOD_FILE go.mod
+
+      - name: Run go mod tidy
+        run: |
+          go mod tidy
+          go mod vendor
+
       - name: Build Docker Image
-        run: sudo docker build -t ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }} --build-arg TARGETPLATFORM=linux/amd64 .
+        run: sudo docker build -t ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.event.inputs.branch }}-${{ github.event.inputs.environment }} --build-arg TARGETPLATFORM=linux/amd64 .
 
       - name: Push Docker Image
-        run: sudo docker push ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}
+        run: sudo docker push ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.event.inputs.branch }}-${{ github.event.inputs.environment }}
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        environment: [ 'nillion-testnet-prod', 'bitsong' ]
-      fail-fast: false
-
-    environment: ${{ matrix.environment }}
+    environment: ${{ github.event.inputs.environment }}
 
     steps:
       - name: Deploy to remote server
@@ -82,23 +104,23 @@ jobs:
               sudo docker rm -f cosmos-indexer
               echo "Cosmos-indexer container removed."
             fi
-            
+
             # Pull the latest cosmos-indexer image
-            sudo docker pull ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}
+            sudo docker pull ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.event.inputs.branch }}-${{ github.event.inputs.environment }}
 
             # Start a new cosmos-indexer container with environment variables
             sudo docker run -d --name cosmos-indexer \
               -p 127.0.0.1:9012:9012 \
               --restart unless-stopped \
               --network indexer_network \
-              ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }} \
+              ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.event.inputs.branch }}-${{ github.event.inputs.environment }} \
               /bin/sh -c "cosmos-indexer index \
                 --log.pretty=true \
                 --log.level=info \
                 --base.start-block=${{ vars.BASE_START_BLOCK }} \
                 --base.end-block=${{ vars.BASE_END_BLOCK || -1 }} \
                 --base.throttling=${{ vars.BASE_THROTTLING || 2.005 }} \
-                --base.rpc-workers=${{ vars.BASE_RPC_WORKERS || 10 }} \
+                --base.rpc-workers=${{ vars.BASE_RPC_WORKERS || 1 }} \
                 --base.index-transactions=${{ vars.BASE_INDEX_TRANSACTIONS || true }} \
                 --base.reindex=${{ vars.BASE_REINDEX || false }} \
                 --base.mode-blocks-step=${{ vars.BASE_GENESIS_BLOCKS_STEP || 5000}} \
@@ -106,14 +128,17 @@ jobs:
                 --probe.account-prefix=${{ vars.PROBE_ACCOUNT_PREFIX }} \
                 --probe.chain-id=${{ vars.PROBE_CHAIN_ID }} \
                 --probe.chain-name=${{ vars.PROBE_CHAIN_NAME }} \
-                --database.host=postgres \
-                --database.database=indexer \
+                --database.host=${{ vars.POSTGRES_HOST || 'postgres' }} \
+                --database.database=${{ vars.POSTGRES_DATABASE || 'indexer' }} \
                 --database.user=${{ secrets.POSTGRES_USER }} \
                 --database.password=${{ secrets.POSTGRES_PASSWORD }} \
                 --server.port=9002 \
                 --redis.addr=redis:6379 \
                 --mongo.addr=mongodb://${{ secrets.MONGO_USER }}:${{ secrets.MONGO_PASSWORD }}@mongo:27017 \
                 --mongo.db=mongo"
+
+            # Restart cosmos-explorer container
+            sudo docker restart cosmos-explorer
 
             # Clean up unused Docker resources
             sudo docker system prune -f

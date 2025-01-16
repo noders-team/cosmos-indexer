@@ -9,6 +9,15 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        environment:
+          - celestia
+
+    environment: ${{ matrix.environment }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -19,20 +28,26 @@ jobs:
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+      - name: Choose go.mod file
+        run: |
+          GO_MOD_FILE=${{ vars.GO_MOD_FILE || 'go.mod.or' }}
+          mv $GO_MOD_FILE go.mod
+
       - name: Build Docker Image
-        run: sudo docker build -t ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }} --build-arg TARGETPLATFORM=linux/amd64 .
+        run: sudo docker build -t ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }} --build-arg TARGETPLATFORM=linux/amd64 .
 
       - name: Push Docker Image
-        run: sudo docker push ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}
+        run: sudo docker push ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }}
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
 
     strategy:
-      matrix:
-        environment: [ 'celestia' ]
       fail-fast: false
+      matrix:
+        environment:
+          - celestia
 
     environment: ${{ matrix.environment }}
 
@@ -47,33 +62,10 @@ jobs:
           script: |
             # Docker Login on the remote server
             echo ${{ secrets.GITHUB_TOKEN }} | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            
-            # Check if the Docker network 'indexer_network' exists, and create it if not
-            if [ $(sudo docker network ls | grep indexer_network | wc -l) -eq 0 ]; then
-              sudo docker network create --driver=bridge indexer_network
-            else
-              echo "Network 'indexer_network' already exists."
-            fi
-
-            # Check if the Postgres container is running, and start it if not
-            if [ $(sudo docker ps -a --filter "name=^postgres_indexer$" --format "{{.Names}}" | wc -l) -eq 0 ]; then
-              sudo docker run -d --name postgres_indexer \
-                --restart unless-stopped \
-                --shm-size=1g \
-                -v postgres_indexer:/var/lib/postgresql/data \
-                -e POSTGRES_USER=${{ secrets.POSTGRES_USER }} \
-                -e POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} \
-                -e POSTGRES_DB=postgres \
-                -p 127.0.0.1:5432:5432 \
-                --network indexer_network \
-                postgres:15-alpine
-            else
-              echo "Postgres container is already running."
-            fi
 
             # Check if the Redis container is running, and start it if not
             if [ $(sudo docker ps -a --filter "name=^redis$" --format "{{.Names}}" | wc -l) -eq 0 ]; then
-              echo "client-output-buffer-limit pubsub 51200mb 51200mb 60" > redis.conf
+              echo "client-output-buffer-limit pubsub 20480mb 20480mb 60" > redis.conf
               sudo docker run -d --name redis \
                 --restart unless-stopped \
                 -p 127.0.0.1:6379:6379 \
@@ -107,14 +99,15 @@ jobs:
             fi
             
             # Pull the latest cosmos-indexer image
-            sudo docker pull ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}
+            sudo docker pull ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }}
 
             # Start a new cosmos-indexer container with environment variables
             sudo docker run -d --name cosmos-indexer \
-              -p 9012:9012 \
+              -p 127.0.0.1:9012:9012 \
+              -p 9002:9002 \
               --restart unless-stopped \
               --network indexer_network \
-              ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }} \
+              ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }} \
               /bin/sh -c "cosmos-indexer index \
                 --log.pretty=true \
                 --log.level=info \
@@ -129,14 +122,17 @@ jobs:
                 --probe.account-prefix=${{ vars.PROBE_ACCOUNT_PREFIX }} \
                 --probe.chain-id=${{ vars.PROBE_CHAIN_ID }} \
                 --probe.chain-name=${{ vars.PROBE_CHAIN_NAME }} \
-                --database.host=postgres_indexer \
-                --database.database=postgres \
+                --database.host=${{ vars.POSTGRES_HOST || 'postgres' }} \
+                --database.database=${{ vars.POSTGRES_DATABASE || 'indexer' }} \
                 --database.user=${{ secrets.POSTGRES_USER }} \
                 --database.password=${{ secrets.POSTGRES_PASSWORD }} \
                 --server.port=9002 \
                 --redis.addr=redis:6379 \
                 --mongo.addr=mongodb://${{ secrets.MONGO_USER }}:${{ secrets.MONGO_PASSWORD }}@mongo:27017 \
                 --mongo.db=mongo"
+
+            # Restart cosmos-explorer container
+            sudo docker restart cosmos-explorer
 
             # Clean up unused Docker resources
             sudo docker system prune -f

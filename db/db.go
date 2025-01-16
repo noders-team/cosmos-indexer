@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/noders-team/cosmos-indexer/pkg/model"
+
 	"github.com/noders-team/cosmos-indexer/config"
 	"github.com/noders-team/cosmos-indexer/db/models"
 	"github.com/rs/zerolog/log"
@@ -84,14 +86,13 @@ func MigrateModels(db *gorm.DB) error {
 		return err
 	}
 
-	// TODO return it back
-	//if err := migrateIndexes(db); err != nil {
-	//	return err
-	//}
+	if err := migrateIndexes(db); err != nil {
+		return err
+	}
 
-	//if err := migrateTables(db); err != nil {
-	//	return err
-	//}
+	if err := migrateTables(db); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -300,27 +301,27 @@ func migrateDenomModels(db *gorm.DB) error {
 
 func migrateTXModels(db *gorm.DB) error {
 	return db.AutoMigrate(
-		&models.Tx{},
-		&models.Fee{},
+		&model.Tx{},
+		&model.Fee{},
 		&models.Address{},
-		&models.MessageType{},
-		&models.Message{},
-		&models.FailedTx{},
-		&models.FailedMessage{},
-		&models.MessageEvent{},
-		&models.MessageEventType{},
-		&models.MessageEventAttribute{},
-		&models.MessageEventAttributeKey{},
-		&models.AuthInfo{},
-		&models.AuthInfoFee{},
-		&models.InfoFeeAmount{},
-		&models.Tip{},
-		&models.TipAmount{},
-		&models.SignerInfo{},
-		&models.TxResponse{},
-		&models.TxDelegateAggregated{},
-		&models.TxEventsValsAggregated{},
-		&models.TxEventsAggregated{},
+		&model.MessageType{},
+		&model.Message{},
+		&model.FailedTx{},
+		&model.FailedMessage{},
+		&model.MessageEvent{},
+		&model.MessageEventType{},
+		&model.MessageEventAttribute{},
+		&model.MessageEventAttributeKey{},
+		&model.AuthInfo{},
+		&model.AuthInfoFee{},
+		&model.InfoFeeAmount{},
+		&model.Tip{},
+		&model.TipAmount{},
+		&model.SignerInfo{},
+		&model.TxResponse{},
+		&model.TxDelegateAggregated{},
+		&model.TxEventsValsAggregated{},
+		&model.TxEventsAggregated{},
 	)
 }
 
@@ -539,7 +540,7 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 		block.Signatures = signaturesCopy
 
 		// pull txes and insert them
-		uniqueTxes := make(map[string]models.Tx)
+		uniqueTxes := make(map[string]model.Tx)
 		uniqueAddress := make(map[string]models.Address)
 
 		denomMap := make(map[string]models.Denom)
@@ -554,7 +555,6 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 			}
 			for feeIndex, fee := range tx.Tx.Fees {
 				uniqueAddress[fee.PayerAddress.Address] = fee.PayerAddress
-
 				denom := fee.Denomination
 
 				if _, ok := denomMap[denom.Base]; !ok {
@@ -571,28 +571,27 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 				tx.Tx.Fees[feeIndex].Denomination = denom
 			}
 
+			for idx := range tx.Tx.AuthInfo.SignerInfos {
+				if tx.Tx.AuthInfo.SignerInfos[idx].Address != nil {
+					uniqueAddress[tx.Tx.AuthInfo.SignerInfos[idx].Address.Address] = *tx.Tx.AuthInfo.SignerInfos[idx].Address
+				}
+			}
+
+			for idx := range tx.Tx.SignerAddresses {
+				uniqueAddress[tx.Tx.SignerAddresses[idx].Address] = tx.Tx.SignerAddresses[idx]
+			}
 		}
 
 		var addressesSlice []models.Address
 		for _, address := range uniqueAddress {
 			addressesSlice = append(addressesSlice, address)
 		}
-
-		if len(addressesSlice) != 0 {
-			for _, address := range addressesSlice {
-				err := dbTransaction.Clauses(clause.OnConflict{
-					Columns:   []clause.Column{{Name: "address"}},
-					DoUpdates: clause.AssignmentColumns([]string{"address"}),
-				}).FirstOrCreate(&address).Error
-				if err != nil {
-					config.Log.Error("Error getting/creating addresses.", err)
-					return err
-				}
-				uniqueAddress[address.Address] = address
-			}
+		dbAddr := addAddresses(ctx, db, addressesSlice)
+		for _, addr := range dbAddr {
+			uniqueAddress[addr.Address] = *addr
 		}
 
-		var txesSlice []models.Tx
+		var txesSlice []model.Tx
 		config.Log.Infof("Unique Txs size %d for block %d", len(uniqueTxes), block.Height)
 		for _, tx := range uniqueTxes {
 			// create auth_info address if it doesn't exist
@@ -625,31 +624,11 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 			}
 			tx.AuthInfo.FeeID = tx.AuthInfo.Fee.ID
 
-			for _, signerInfo := range tx.AuthInfo.SignerInfos {
-				res := dbTransaction.Raw(`
-					INSERT INTO addresses (address)
-					VALUES (?)
-					ON CONFLICT (address) DO NOTHING
-					RETURNING id`, signerInfo.Address.Address).Scan(&signerInfo.Address.ID)
-				if res.Error != nil {
-					config.Log.Warnf("Error getting/creating signerInfo.Address DB object %v %v", res.Error, signerInfo.Address)
-					err := dbTransaction.Rollback().Error
-					if err != nil {
-						config.Log.Warnf("error during rollback %v", err)
-					}
-					continue
-				}
-				if res.RowsAffected == 0 {
-					if err := dbTransaction.
-						Raw(`SELECT id from addresses where address = ?`, signerInfo.Address.Address).
-						Scan(&signerInfo.Address.ID).Error; err != nil {
-						config.Log.Warnf("Error getting signerInfo.Address DB object %v %v", err, signerInfo.Address)
-					}
-				}
-				signerInfo.AddressID = signerInfo.Address.ID
-				if signerInfo.AddressID == 0 {
-					log.Error().Msgf("Address ID is 0 for %v", signerInfo)
-					continue
+			for idx, signerInfo := range tx.AuthInfo.SignerInfos {
+				addr, found := uniqueAddress[signerInfo.Address.Address]
+				if found {
+					tx.AuthInfo.SignerInfos[idx].Address = &addr
+					tx.AuthInfo.SignerInfos[idx].AddressID = addr.ID
 				}
 
 				if err := dbTransaction.Raw(`
@@ -712,13 +691,10 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 
 			tx.TxResponseID = tx.TxResponse.ID
 
-			var signerAddressID uint
-
-			if len(tx.SignerAddresses) != 0 {
-				for addressIndex := range tx.SignerAddresses {
-					signerAddressID = uniqueAddress[tx.SignerAddresses[addressIndex].Address].ID
-					tx.SignerAddresses[addressIndex] = uniqueAddress[tx.SignerAddresses[addressIndex].Address]
-					tx.SignerAddresses[addressIndex].ID = signerAddressID
+			for idx := range tx.SignerAddresses {
+				addr, found := uniqueAddress[tx.SignerAddresses[idx].Address]
+				if found {
+					tx.SignerAddresses[idx] = addr
 				}
 			}
 
@@ -727,20 +703,15 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 				tx.Fees[feeIndex].PayerAddress = uniqueAddress[tx.Fees[feeIndex].PayerAddress.Address]
 			}
 
-			txesSlice = append(txesSlice, tx)
-		}
-
-		if len(txesSlice) != 0 {
-			config.Log.Infof("TxesSlice size %d for block %d", len(txesSlice), block.Height)
-			for _, tx := range txesSlice {
-				err := dbTransaction.Clauses(clause.OnConflict{
-					Columns:   []clause.Column{{Name: "hash"}},
-					DoUpdates: clause.AssignmentColumns([]string{"code", "block_id"}),
-				}).FirstOrCreate(&tx).Error
-				if err != nil {
-					config.Log.Warn("Error getting/creating txes.", err)
-				}
+			err := dbTransaction.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "hash"}},
+				DoUpdates: clause.AssignmentColumns([]string{"code", "block_id"}),
+			}).Create(&tx).Error
+			if err != nil {
+				config.Log.Warn("Error getting/creating txes.", err)
 			}
+
+			txesSlice = append(txesSlice, tx)
 		}
 
 		for _, tx := range txesSlice {
@@ -768,7 +739,7 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 		for txIndex, tx := range txs {
 			tx.Tx = uniqueTxes[tx.Tx.Hash]
 			txs[txIndex].Tx = tx.Tx
-			var messagesSlice []*models.Message
+			var messagesSlice []*model.Message
 			for messageIndex := range tx.Messages {
 				tx.Messages[messageIndex].Message.TxID = tx.Tx.ID
 				tx.Messages[messageIndex].Message.Tx = tx.Tx
@@ -792,19 +763,53 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 				messagesSlice = append(messagesSlice, &tx.Messages[messageIndex].Message)
 			}
 
-			if len(messagesSlice) != 0 {
-				for _, message := range messagesSlice {
-					if err := dbTransaction.Clauses(clause.OnConflict{
-						Columns:   []clause.Column{{Name: "tx_id"}, {Name: "message_index"}},
-						DoUpdates: clause.AssignmentColumns([]string{"message_type_id", "message_bytes"}),
-					}).FirstOrCreate(message).Error; err != nil {
-						config.Log.Error("Error getting/creating messages.", err)
-						return err
+			for _, message := range messagesSlice {
+				// saving message type
+				res := dbTransaction.Raw(`INSERT INTO message_types (message_type)
+						VALUES (?)
+					ON CONFLICT (message_type) DO NOTHING
+					RETURNING id`, message.MessageType.MessageType).
+					Scan(&message.MessageTypeID)
+				if res.Error != nil {
+					err := dbTransaction.Rollback().Error
+					if err != nil {
+						config.Log.Warnf("error during rollback %v", err)
+					}
+					continue
+				}
+				if res.RowsAffected == 0 {
+					if err := dbTransaction.
+						Raw(`SELECT id from message_types where message_type = ?`, message.MessageType.MessageType).
+						Scan(&message.MessageTypeID).Error; err != nil {
 					}
 				}
+
+				queryMsg := `
+						INSERT INTO messages (tx_id, message_type_id, message_index, message_bytes)
+						VALUES (?, ?, ?, ?)
+						ON CONFLICT (tx_id, message_index) DO NOTHING
+						RETURNING id`
+				res = dbTransaction.Raw(queryMsg, message.Tx.ID, message.MessageTypeID,
+					message.MessageIndex, message.MessageBytes).
+					Scan(&message.ID)
+				if res.Error != nil {
+					err := dbTransaction.Rollback().Error
+					if err != nil {
+						config.Log.Warnf("error during rollback %v", err)
+					}
+					continue
+				}
+				if res.RowsAffected == 0 {
+					if err := dbTransaction.
+						Raw(`SELECT id from messages where tx_id = ? and message_index =?`,
+							message.Tx.ID, message.MessageIndex).
+						Scan(&message.ID).Error; err != nil {
+					}
+				}
+				// log.Info().Msgf("Message created %d", message.ID)
 			}
 
-			var messagesEventsSlice []*models.MessageEvent
+			var messagesEventsSlice []*model.MessageEvent
 			for messageIndex := range tx.Messages {
 				for eventIndex := range tx.Messages[messageIndex].MessageEvents {
 					tx.Messages[messageIndex].MessageEvents[eventIndex].MessageEvent.MessageID = tx.Messages[messageIndex].Message.ID
@@ -816,17 +821,52 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 
 			if len(messagesEventsSlice) != 0 {
 				for _, messageEvent := range messagesEventsSlice {
-					if err := dbTransaction.Clauses(clause.OnConflict{
-						Columns:   []clause.Column{{Name: "message_id"}, {Name: "index"}},
-						DoUpdates: clause.AssignmentColumns([]string{"message_event_type_id"}),
-					}).FirstOrCreate(messageEvent).Error; err != nil {
-						config.Log.Error("Error getting/creating message events.", err)
-						return err
+					res := dbTransaction.Raw(`INSERT INTO message_event_types (type)
+						VALUES (?)
+					ON CONFLICT (type) DO NOTHING
+					RETURNING id`, messageEvent.MessageEventType.Type).
+						Scan(&messageEvent.MessageEventTypeID)
+					if res.Error != nil {
+						err := dbTransaction.Rollback().Error
+						if err != nil {
+							config.Log.Warnf("error during rollback %v", err)
+						}
+						continue
 					}
+					if res.RowsAffected == 0 {
+						if err := dbTransaction.
+							Raw(`SELECT id from message_event_types where type = ?`, messageEvent.MessageEventType.Type).
+							Scan(&messageEvent.MessageEventTypeID).Error; err != nil {
+						}
+					}
+
+					queryMsg := `
+						INSERT INTO message_events (index, message_id, message_event_type_id)
+						VALUES (?, ?, ?)
+						ON CONFLICT (message_id, index) DO NOTHING
+						RETURNING id`
+					res = dbTransaction.Raw(queryMsg, messageEvent.Index,
+						messageEvent.MessageID, messageEvent.MessageEventTypeID).
+						Scan(&messageEvent.ID)
+					if res.Error != nil {
+						err := dbTransaction.Rollback().Error
+						if err != nil {
+							config.Log.Warnf("error during rollback %v", err)
+						}
+						continue
+					}
+					if res.RowsAffected == 0 {
+						if err := dbTransaction.
+							Raw(`SELECT id from message_events where index = ? and message_id =?`,
+								messageEvent.Index, messageEvent.MessageID).
+							Scan(&messageEvent.ID).Error; err != nil {
+						}
+					}
+					// log.Info().Msgf("MessageEvent created %d", messageEvent.ID)
 				}
 			}
 
-			var messagesEventsAttributesSlice []*models.MessageEventAttribute
+			var messagesEventsAttributesSlice []*model.MessageEventAttribute
 			for messageIndex := range tx.Messages {
 				for eventIndex := range tx.Messages[messageIndex].MessageEvents {
 					for attributeIndex := range tx.Messages[messageIndex].MessageEvents[eventIndex].Attributes {
@@ -840,13 +880,50 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 
 			if len(messagesEventsAttributesSlice) != 0 {
 				for _, messageEventAttribute := range messagesEventsAttributesSlice {
-					if err := dbTransaction.Clauses(clause.OnConflict{
-						Columns:   []clause.Column{{Name: "message_event_id"}, {Name: "index"}},
-						DoUpdates: clause.AssignmentColumns([]string{"value", "message_event_attribute_key_id"}),
-					}).FirstOrCreate(messageEventAttribute).Error; err != nil {
-						config.Log.Error("Error getting/creating message event attributes.", err)
-						return err
+					res := dbTransaction.Raw(`INSERT INTO message_event_attribute_keys (key)
+						VALUES (?)
+					ON CONFLICT (key) DO NOTHING
+					RETURNING id`, messageEventAttribute.MessageEventAttributeKey.Key).
+						Scan(&messageEventAttribute.MessageEventAttributeKeyID)
+					if res.Error != nil {
+						err := dbTransaction.Rollback().Error
+						if err != nil {
+							config.Log.Warnf("error during rollback %v", err)
+						}
+						continue
 					}
+					if res.RowsAffected == 0 {
+						if err := dbTransaction.
+							Raw(`SELECT id from message_event_attribute_keys where key = ?`,
+								messageEventAttribute.MessageEventAttributeKey.Key).
+							Scan(&messageEventAttribute.MessageEventAttributeKeyID).Error; err != nil {
+						}
+					}
+
+					queryMsg := `
+						INSERT INTO message_event_attributes (message_event_id, value, index, message_event_attribute_key_id)
+						VALUES (?, ?, ?, ?)
+						ON CONFLICT (message_event_id, index) DO NOTHING
+						RETURNING id`
+					res = dbTransaction.Raw(queryMsg, messageEventAttribute.MessageEventID,
+						messageEventAttribute.Value, messageEventAttribute.Index,
+						messageEventAttribute.MessageEventAttributeKeyID).
+						Scan(&messageEventAttribute.ID)
+					if res.Error != nil {
+						err := dbTransaction.Rollback().Error
+						if err != nil {
+							config.Log.Warnf("error during rollback %v", err)
+						}
+						continue
+					}
+					if res.RowsAffected == 0 {
+						if err := dbTransaction.
+							Raw(`SELECT id from message_event_attributes where message_event_id = ? and index =?`,
+								messageEventAttribute.MessageEventID, messageEventAttribute.Index).
+							Scan(&messageEventAttribute.ID).Error; err != nil {
+						}
+					}
+					// log.Info().Msgf("messageEventAttribute created %d", messageEventAttribute.ID)
 				}
 			}
 		}
@@ -858,15 +935,30 @@ func IndexNewBlock(db *gorm.DB, block models.Block, txs []TxDBWrapper, indexerCo
 	return block, txs, err
 }
 
-func indexMessageTypes(db *gorm.DB, txs []TxDBWrapper) (map[string]models.MessageType, error) {
-	fullUniqueBlockMessageTypes := make(map[string]models.MessageType)
+func addAddresses(ctx context.Context, dbTx *gorm.DB, addressesSlice []models.Address) []*models.Address {
+	res := make([]*models.Address, 0)
+	for _, address := range addressesSlice {
+		err := dbTx.WithContext(ctx).
+			Where(models.Address{Address: address.Address}).
+			FirstOrCreate(&address).Error
+		if err != nil {
+			config.Log.Error("Error getting/creating addresses.", err)
+			return res
+		}
+		res = append(res, &address)
+	}
+	return res
+}
+
+func indexMessageTypes(db *gorm.DB, txs []TxDBWrapper) (map[string]model.MessageType, error) {
+	fullUniqueBlockMessageTypes := make(map[string]model.MessageType)
 	for _, tx := range txs {
 		for messageTypeKey, messageType := range tx.UniqueMessageTypes {
 			fullUniqueBlockMessageTypes[messageTypeKey] = messageType
 		}
 	}
 
-	var messageTypesSlice []models.MessageType
+	var messageTypesSlice []model.MessageType
 	for _, messageType := range fullUniqueBlockMessageTypes {
 		messageTypesSlice = append(messageTypesSlice, messageType)
 	}
@@ -887,8 +979,8 @@ func indexMessageTypes(db *gorm.DB, txs []TxDBWrapper) (map[string]models.Messag
 	return fullUniqueBlockMessageTypes, nil
 }
 
-func indexMessageEventTypes(db *gorm.DB, txs []TxDBWrapper) (map[string]models.MessageEventType, error) {
-	fullUniqueBlockMessageEventTypes := make(map[string]models.MessageEventType)
+func indexMessageEventTypes(db *gorm.DB, txs []TxDBWrapper) (map[string]model.MessageEventType, error) {
+	fullUniqueBlockMessageEventTypes := make(map[string]model.MessageEventType)
 
 	for _, tx := range txs {
 		for messageEventTypeKey, messageEventType := range tx.UniqueMessageEventTypes {
@@ -896,7 +988,7 @@ func indexMessageEventTypes(db *gorm.DB, txs []TxDBWrapper) (map[string]models.M
 		}
 	}
 
-	var messageTypesSlice []models.MessageEventType
+	var messageTypesSlice []model.MessageEventType
 	for _, messageType := range fullUniqueBlockMessageEventTypes {
 		messageTypesSlice = append(messageTypesSlice, messageType)
 	}
@@ -917,8 +1009,8 @@ func indexMessageEventTypes(db *gorm.DB, txs []TxDBWrapper) (map[string]models.M
 	return fullUniqueBlockMessageEventTypes, nil
 }
 
-func indexMessageEventAttributeKeys(db *gorm.DB, txs []TxDBWrapper) (map[string]models.MessageEventAttributeKey, error) {
-	fullUniqueMessageEventAttributeKeys := make(map[string]models.MessageEventAttributeKey)
+func indexMessageEventAttributeKeys(db *gorm.DB, txs []TxDBWrapper) (map[string]model.MessageEventAttributeKey, error) {
+	fullUniqueMessageEventAttributeKeys := make(map[string]model.MessageEventAttributeKey)
 
 	for _, tx := range txs {
 		for messageEventAttributeKey, messageEventAttribute := range tx.UniqueMessageAttributeKeys {
@@ -926,7 +1018,7 @@ func indexMessageEventAttributeKeys(db *gorm.DB, txs []TxDBWrapper) (map[string]
 		}
 	}
 
-	var messageEventAttributeKeysSlice []models.MessageEventAttributeKey
+	var messageEventAttributeKeysSlice []model.MessageEventAttributeKey
 	for _, messageEventAttributeKey := range fullUniqueMessageEventAttributeKeys {
 		messageEventAttributeKeysSlice = append(messageEventAttributeKeysSlice, messageEventAttributeKey)
 	}
