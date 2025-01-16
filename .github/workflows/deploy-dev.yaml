@@ -104,6 +104,7 @@ jobs:
             # Start a new cosmos-indexer container with environment variables
             sudo docker run -d --name cosmos-indexer \
               -p 127.0.0.1:9012:9012 \
+              -p 9002:9002 \
               --restart unless-stopped \
               --network indexer_network \
               ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }} \
