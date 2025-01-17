@@ -26,14 +26,16 @@ func NewAggregatesConsumer(txs repository.Txs, srvAggregates service.Aggregates)
 
 func (s *aggregatesConsumer) Consume(ctx context.Context) error {
 	log.Info().Msg("starting aggregates consumer")
-	t := time.NewTicker(5 * time.Second)
+	t := time.NewTicker(60 * time.Second)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-t.C:
-			_, err := s.srvAggregates.StoreAggregates(ctx)
+			ctxTimeout, done := context.WithTimeout(ctx, 50*time.Second)
+			defer done()
+			_, err := s.srvAggregates.StoreAggregates(ctxTimeout)
 			if err != nil {
 				log.Error().Err(err).Msg("failed to store aggregated data in consumer")
 			}

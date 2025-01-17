@@ -32,7 +32,7 @@ func (s *aggregates) GetTotals(ctx context.Context) (*model.AggregatedInfo, erro
 		defer done()
 		info, err = s.StoreAggregates(ctxTimeout)
 		if err != nil {
-			log.Err(err).Msg("failed to store aggregated data in consumer")
+			log.Err(err).Msg("failed to store aggregated data in service")
 			return nil, err
 		}
 	}
@@ -40,6 +40,8 @@ func (s *aggregates) GetTotals(ctx context.Context) (*model.AggregatedInfo, erro
 }
 
 func (s *aggregates) StoreAggregates(ctx context.Context) (*model.AggregatedInfo, error) {
+	log.Info().Msg("starting to store aggregates")
+
 	blocksTotal, err := s.blocks.TotalBlocks(ctx, time.Now().UTC())
 	if err != nil {
 		log.Err(err).Msg("failed to fetch total blocks")
@@ -77,6 +79,7 @@ func (s *aggregates) StoreAggregates(ctx context.Context) (*model.AggregatedInfo
 		log.Err(err).Msg("failed to add totals to cache")
 		return nil, err
 	}
+	log.Info().Msg("finished to store aggregates")
 
 	return info, nil
 }

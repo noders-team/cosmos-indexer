@@ -509,6 +509,12 @@ func runIndexer(ctx context.Context, idxr *Indexer, startBlock, endBlock int64) 
 	}
 
 	srvAggregates := service.NewAggregates(cache, repoBlocks, repoTxs)
+	_, err = srvAggregates.StoreAggregates(ctx)
+	if err != nil {
+		log.Err(err).Msgf("error storing aggregates")
+		panic(err)
+	}
+
 	blocksServer := server.NewBlocksServer(srvBlocks, srvTxs, srvSearch, *cache, srvAggregates)
 	size := 1024 * 1024 * 50
 	grpcServer := grpc.NewServer(
