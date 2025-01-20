@@ -179,7 +179,7 @@ func (r *blocks) LatestBlockHeight(ctx context.Context) (int64, error) {
 }
 
 func (r *blocks) TotalBlocks(ctx context.Context, to time.Time) (*model.TotalBlocks, error) {
-	query := `SELECT COALESCE(MAX(blocks.height, 0)) as height FROM blocks ORDER BY blocks.height DESC limit 1`
+	query := `SELECT COALESCE(MAX(blocks.height), 0) as height FROM blocks ORDER BY blocks.height DESC limit 1`
 	row := r.db.QueryRow(ctx, query)
 	var blockHeight int64
 	if err := row.Scan(&blockHeight); err != nil {
