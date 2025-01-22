@@ -508,7 +508,14 @@ func runIndexer(ctx context.Context, idxr *Indexer, startBlock, endBlock int64) 
 		config.Log.Fatal("Unable to run listener", err)
 	}
 
-	blocksServer := server.NewBlocksServer(srvBlocks, srvTxs, srvSearch, *cache)
+	srvAggregates := service.NewAggregates(cache, repoBlocks, repoTxs)
+	_, err = srvAggregates.StoreAggregates(ctx)
+	if err != nil {
+		log.Err(err).Msgf("error storing aggregates")
+		panic(err)
+	}
+
+	blocksServer := server.NewBlocksServer(srvBlocks, srvTxs, srvSearch, *cache, srvAggregates)
 	size := 1024 * 1024 * 50
 	grpcServer := grpc.NewServer(
 		grpc.MaxSendMsgSize(size),
@@ -542,7 +549,7 @@ func runIndexer(ctx context.Context, idxr *Indexer, startBlock, endBlock int64) 
 		}
 	}(ctx)
 
-	aggregatesConsumer := consumer.NewAggregatesConsumer(cache, repoBlocks, repoTxs)
+	aggregatesConsumer := consumer.NewAggregatesConsumer(repoTxs, srvAggregates)
 	go func(ctx context.Context) {
 		err := aggregatesConsumer.Consume(ctx)
 		if err != nil {

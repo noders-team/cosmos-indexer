@@ -1,0 +1,61 @@
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 100m
+      max-file: "3"
+      tag: '{{.ImageName}}|{{.Name}}|{{.ID}}'
+
+services:
+  postgres:
+    container_name: postgres-indexer
+    restart: "unless-stopped"
+    image: postgres:15-alpine
+    stop_grace_period: 1m
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./postgres-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=indexer
+    ports:
+      - "5437:5432/tcp"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "-v", "localhost", "5432"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - indexer_network
+    <<: *logging
+
+  redis:
+    container_name: redis
+    image: redis
+    ports:
+      - '6381:6379'
+    networks:
+      - indexer_network
+    <<: *logging
+
+  mongodb:
+    container_name: mongodb
+    restart: "unless-stopped"
+    image: mongo:5.0.2
+    shm_size: 1g
+    environment:
+      - MONGO_INITDB_DATABASE=indexer
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+    volumes:
+      - ./mongodb-data:/data/db
+    networks:
+      - indexer_network
+    ports:
+      - '27017-27019:27017-27019'
+
+networks:
+  indexer_network:
+    name: indexer_network
+    driver: bridge

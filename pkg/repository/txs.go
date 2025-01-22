@@ -330,7 +330,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 			goqu.On(goqu.Ex{"txes.block_id": goqu.I("blocks.id")}),
 		)
 
-	log.Info().Msgf("=> Transactions ==> filter.TxHashes: %~v", filter)
+	log.Info().Msgf("=> Transactions ==> filter.TxHashes: %v", filter)
 	if filter != nil {
 		if filter.TxBlockHeight != nil {
 			dialect = dialect.Where(goqu.I("blocks.height").Eq(*filter.TxBlockHeight))
@@ -1003,7 +1003,7 @@ func (r *txs) TransactionsByEventValue(ctx context.Context, values []string, mes
 	limit int64, offset int64,
 ) ([]*model.Tx, int64, error) {
 	startTime := time.Now()
-	log.Info().Msgf("=> start TransactionsByEventValue %s", startTime.String())
+	// log.Info().Msgf("=> start TransactionsByEventValue %s", startTime.String())
 
 	query, args := r.transactionsByEventValuePrepareV2(values, messageType, limit, offset)
 
@@ -1012,7 +1012,7 @@ func (r *txs) TransactionsByEventValue(ctx context.Context, values []string, mes
 		return nil, 0, err
 	}
 	defer rows.Close()
-	log.Info().Msgf("=> TransactionsByEventValue done in: %s", time.Since(startTime).String())
+	// log.Info().Msgf("=> TransactionsByEventValue done in: %s", time.Since(startTime).String())
 
 	txHashes := make([]string, 0)
 	for rows.Next() {
@@ -1034,7 +1034,7 @@ func (r *txs) TransactionsByEventValue(ctx context.Context, values []string, mes
 		return nil, 0, err
 	}
 
-	log.Info().Msgf("=> TransactionsByEventValue before loop in: %s", time.Since(startTime).String())
+	// log.Info().Msgf("=> TransactionsByEventValue before loop in: %s", time.Since(startTime).String())
 
 	for _, tx := range data {
 		if includeEvents {
@@ -1046,7 +1046,7 @@ func (r *txs) TransactionsByEventValue(ctx context.Context, values []string, mes
 		}
 	}
 
-	log.Info().Msgf("=> TransactionsByEventValue after loop in: %s", time.Since(startTime).String())
+	// log.Info().Msgf("=> TransactionsByEventValue after loop in: %s", time.Since(startTime).String())
 
 	// calculating total count
 	total, err := r.transactionsByEventValueTotals(ctx, values, messageType)

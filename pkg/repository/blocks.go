@@ -179,7 +179,7 @@ func (r *blocks) LatestBlockHeight(ctx context.Context) (int64, error) {
 }
 
 func (r *blocks) TotalBlocks(ctx context.Context, to time.Time) (*model.TotalBlocks, error) {
-	query := `select blocks.height from blocks order by blocks.height desc limit 1`
+	query := `SELECT COALESCE(MAX(blocks.height), 0) as height FROM blocks`
 	row := r.db.QueryRow(ctx, query)
 	var blockHeight int64
 	if err := row.Scan(&blockHeight); err != nil {
@@ -209,8 +209,8 @@ func (r *blocks) TotalBlocks(ctx context.Context, to time.Time) (*model.TotalBlo
 				INNER JOIN blocks ON txes.block_id = blocks.id
 				WHERE blocks.time_stamp BETWEEN $1 AND $2`
 	row = r.db.QueryRow(ctx, query, from, to.UTC())
-	feeSum := int64(0)
-	if err := row.Scan(&feeSum); err != nil {
+	var feeSum decimal.Decimal
+	if err = row.Scan(&feeSum); err != nil {
 		log.Err(err).Msgf("row.Scan(&feeSum)")
 		return nil, err
 	}
@@ -220,7 +220,7 @@ func (r *blocks) TotalBlocks(ctx context.Context, to time.Time) (*model.TotalBlo
 		Count24H:    count24H,
 		Count48H:    count48H,
 		BlockTime:   int64(blockTime),
-		TotalFee24H: decimal.NewFromInt(feeSum),
+		TotalFee24H: feeSum,
 	}, nil
 }
 

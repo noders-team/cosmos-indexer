@@ -33,6 +33,11 @@ jobs:
           GO_MOD_FILE=${{ vars.GO_MOD_FILE || 'go.mod.or' }}
           mv $GO_MOD_FILE go.mod
 
+      - name: Run go mod tidy
+        run: |
+          go mod tidy
+          go mod vendor
+
       - name: Build Docker Image
         run: sudo docker build -t ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }} --build-arg TARGETPLATFORM=linux/amd64 .
 
@@ -104,6 +109,7 @@ jobs:
             # Start a new cosmos-indexer container with environment variables
             sudo docker run -d --name cosmos-indexer \
               -p 127.0.0.1:9012:9012 \
+              -p 9002:9002 \
               --restart unless-stopped \
               --network indexer_network \
               ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }} \
@@ -129,6 +135,9 @@ jobs:
                 --redis.addr=redis:6379 \
                 --mongo.addr=mongodb://${{ secrets.MONGO_USER }}:${{ secrets.MONGO_PASSWORD }}@mongo:27017 \
                 --mongo.db=mongo"
+
+            # Restart cosmos-explorer container
+            sudo docker restart cosmos-explorer
 
             # Clean up unused Docker resources
             sudo docker system prune -f

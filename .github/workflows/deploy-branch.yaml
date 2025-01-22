@@ -1,32 +1,36 @@
-name: Deploy Indexer - PROD
+name: Deploy Indexer - PROD - From Branch
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - '*'
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        environment:
+    inputs:
+      branch:
+        description: 'Branch to build from'
+        required: true
+        default: 'main'
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'celestia'
+        type: choice
+        options:
+          - celestia
           - celestia-prod
           - 0g-testnet-prod
           - nillion-testnet-prod
           - story-testnet-prod
           - babylon-testnet-prod
 
-    environment: ${{ matrix.environment }}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    environment: ${{ github.event.inputs.environment }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.event.inputs.branch }}
 
       - name: Docker Login
         run: |
@@ -43,25 +47,16 @@ jobs:
           go mod vendor
 
       - name: Build Docker Image
-        run: sudo docker build -t ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }} --build-arg TARGETPLATFORM=linux/amd64 .
+        run: sudo docker build -t ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.event.inputs.branch }}-${{ github.event.inputs.environment }} --build-arg TARGETPLATFORM=linux/amd64 .
 
       - name: Push Docker Image
-        run: sudo docker push ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }}
+        run: sudo docker push ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.event.inputs.branch }}-${{ github.event.inputs.environment }}
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
 
-    strategy:
-      fail-fast: false
-      matrix:
-        environment:
-          - celestia-prod
-          - 0g-testnet-prod
-          - nillion-testnet-prod
-          - story-testnet-prod
-
-    environment: ${{ matrix.environment }}
+    environment: ${{ github.event.inputs.environment }}
 
     steps:
       - name: Deploy to remote server
@@ -109,16 +104,16 @@ jobs:
               sudo docker rm -f cosmos-indexer
               echo "Cosmos-indexer container removed."
             fi
-            
+
             # Pull the latest cosmos-indexer image
-            sudo docker pull ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }}
+            sudo docker pull ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.event.inputs.branch }}-${{ github.event.inputs.environment }}
 
             # Start a new cosmos-indexer container with environment variables
             sudo docker run -d --name cosmos-indexer \
               -p 127.0.0.1:9012:9012 \
               --restart unless-stopped \
               --network indexer_network \
-              ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }} \
+              ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.event.inputs.branch }}-${{ github.event.inputs.environment }} \
               /bin/sh -c "cosmos-indexer index \
                 --log.pretty=true \
                 --log.level=info \
@@ -141,9 +136,9 @@ jobs:
                 --redis.addr=redis:6379 \
                 --mongo.addr=mongodb://${{ secrets.MONGO_USER }}:${{ secrets.MONGO_PASSWORD }}@mongo:27017 \
                 --mongo.db=mongo"
-            
+
             # Restart cosmos-explorer container
             sudo docker restart cosmos-explorer
-            
+
             # Clean up unused Docker resources
             sudo docker system prune -f

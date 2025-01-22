@@ -40,20 +40,7 @@ func PostgresDbConnect(host string, port string, database string, user string, p
 		gormLogLevel = logger.Info
 	}
 
-	/*
-		println(gormLogLevel)
-
-		logger := logger.New(
-			logrus.NewWriter(),
-			logger.Config{
-				SlowThreshold: time.Millisecond,
-				LogLevel:      logger.Warn,
-				Colorful:      false,
-			},
-		)*/
-
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(gormLogLevel)})
-	// db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger})
 	if err != nil {
 		return nil, err
 	}
@@ -67,37 +54,39 @@ func PostgresDbConnect(host string, port string, database string, user string, p
 // MigrateModels runs the gorm automigrations with all the db models. This will migrate as needed and do nothing if nothing has changed.
 func MigrateModels(db *gorm.DB) error {
 	if err := migrateChainModels(db); err != nil {
-		return err
+		log.Err(err).Msgf("Error migrating chain models")
 	}
 
 	if err := migrateBlockModels(db); err != nil {
-		return err
+		log.Err(err).Msgf("Error migrating block models")
 	}
 
 	if err := migrateDenomModels(db); err != nil {
-		return err
+		log.Err(err).Msgf("Error migrating denom models")
 	}
 
 	if err := migrateTXModels(db); err != nil {
-		return err
+		log.Err(err).Msgf("Error migrating tx models")
 	}
 
 	if err := migrateParserModels(db); err != nil {
-		return err
+		log.Err(err).Msgf("Error migrating parser models")
 	}
 
 	if err := migrateIndexes(db); err != nil {
-		return err
+		log.Err(err).Msgf("Error migrating indexes")
 	}
 
 	if err := migrateTables(db); err != nil {
-		return err
+		log.Err(err).Msgf("Error migrating tables")
 	}
 
 	return nil
 }
 
 func migrateIndexes(db *gorm.DB) error {
+	log.Info().Msgf("Migrating indexes")
+
 	err := db.Exec(`create index if not exists idx_height_desc on blocks (height desc);`).Error
 	if err != nil {
 		return err
@@ -145,10 +134,13 @@ func migrateIndexes(db *gorm.DB) error {
 		return err
 	}
 
+	log.Info().Msgf("Migrating indexes - DONE")
 	return nil
 }
 
 func migrateTables(db *gorm.DB) error {
+	log.Info().Msgf("Migrating tables")
+
 	query := `CREATE MATERIALIZED VIEW IF NOT EXISTS transactions_normalized AS
 SELECT
     message_event_attributes.value as account,
@@ -271,6 +263,7 @@ group by inn.id, inn.timestamp, inn.hash, inn.height;`
 		return err
 	}
 
+	log.Info().Msgf("Migrating tables - DONE")
 	return nil
 }
 
