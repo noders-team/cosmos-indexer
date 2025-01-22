@@ -863,8 +863,10 @@ func (idxr *Indexer) processBlocks(wg *sync.WaitGroup,
 			var txDBWrappers []dbTypes.TxDBWrapper
 			var err error
 
-			if blockData.GetTxsResponse != nil {
-				config.Log.Infof("Processing TXs from RPC TX Search response size: %d", len(blockData.GetTxsResponse.Txs))
+			if blockData.GetTxsResponse != nil && len(blockData.GetTxsResponse.Txs) > 0 {
+				config.Log.Infof("Processing TXs from RPC TX Search response size: %d total %d",
+					len(blockData.GetTxsResponse.Txs),
+					blockData.GetTxsResponse.Total)
 				txDBWrappers, _, err = idxr.txParser.ProcessRPCTXs(idxr.messageTypeFilters, blockData.GetTxsResponse)
 			} else if blockData.BlockResultsData != nil {
 				config.Log.Info("Processing TXs from BlockResults search response")

@@ -28,8 +28,8 @@ func TestDecoding(t *testing.T) {
 	blockWorker := NewBlockRPCWorker("id", nil, cl, nil, chainRpcClient)
 
 	blData := blockWorker.FetchBlock(rpcClient, &EnqueueData{
-		Height:           2480035,
-		IndexBlockEvents: true, IndexTransactions: true,
+		Height:            2480035,
+		IndexTransactions: true,
 	})
 	require.NotNil(t, blData)
 

@@ -185,6 +185,11 @@ func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageT
 		filteredSigners := []types.AccAddress{}
 		for _, filteredMessage := range txBody.Messages {
 			if filteredMessage != nil {
+				err := filteredMessage.ValidateBasic()
+				if err != nil {
+					config.Log.Error("error validating filtered message, ignoring", err)
+					continue
+				}
 				filteredSigners = append(filteredSigners, filteredMessage.GetSigners()...)
 			}
 		}
