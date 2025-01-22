@@ -19,6 +19,7 @@ on:
           - nillion-testnet-prod
           - story-testnet-prod
           - babylon-testnet-prod
+          - berachain-prod
 
 jobs:
   build:

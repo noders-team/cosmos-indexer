@@ -19,6 +19,7 @@ jobs:
           - nillion-testnet-prod
           - story-testnet-prod
           - babylon-testnet-prod
+          - berachain-prod
 
     environment: ${{ matrix.environment }}
 
@@ -60,6 +61,7 @@ jobs:
           - 0g-testnet-prod
           - nillion-testnet-prod
           - story-testnet-prod
+          - berachain-prod
 
     environment: ${{ matrix.environment }}
 
