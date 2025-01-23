@@ -682,27 +682,26 @@ func (r *txs) GetWalletsCount(ctx context.Context) (*model.TotalWallets, error) 
 					 left join message_event_types on message_events.message_event_type_id=message_event_types.id
 					 left join message_event_attributes on message_events.id = message_event_attributes.message_event_id
 					 left join message_event_attribute_keys on message_event_attributes.message_event_attribute_key_id = message_event_attribute_keys.id
-			where message_event_attribute_keys.key = ANY($2) `
+			where message_event_attribute_keys.key = ANY($1) `
 
-	queryPerDate := query + `and DATE_TRUNC('day', txes.timestamp) = DATE_TRUNC('day', $1)`
+	queryPerDate := query + `AND txes.timestamp >= $2`
 	types := []string{"sender", "receiver", "recipient"}
-	row := r.db.QueryRow(ctx, queryPerDate, time.Now().UTC(), types)
+	row := r.db.QueryRow(ctx, queryPerDate, types, time.Now().UTC().Add(-24*time.Hour))
 	var count24H int64
 	if err := row.Scan(&count24H); err != nil {
 		log.Err(err).Msgf("GetWalletsCount 24H: rows error")
 		count24H = 0
 	}
 
-	row = r.db.QueryRow(ctx, queryPerDate, time.Now().UTC().Add(-24*time.Hour), types)
+	row = r.db.QueryRow(ctx, queryPerDate, types, time.Now().UTC().Add(-48*time.Hour))
 	var count48H int64
 	if err := row.Scan(&count48H); err != nil {
 		log.Err(err).Msgf("GetWalletsCount 48H: rows error")
 		count48H = 0
 	}
 
-	queryMoreDate := query + `and DATE_TRUNC('day', txes.timestamp) >= DATE_TRUNC('day', $1)`
 	firstDay := time.Date(time.Now().UTC().Year(), time.Now().UTC().Month(), 1, 0, 0, 0, 0, time.Local)
-	row = r.db.QueryRow(ctx, queryMoreDate, firstDay, types)
+	row = r.db.QueryRow(ctx, queryPerDate, types, firstDay)
 	var count30D int64
 	if err := row.Scan(&count30D); err != nil {
 		log.Err(err).Msgf("GetWalletsCount 30D: rows error")
