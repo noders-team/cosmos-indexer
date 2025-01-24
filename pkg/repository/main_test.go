@@ -405,6 +405,14 @@ create unique index "messageAttributeIndex"
 );`
 	migrations = append(migrations, queryDepositsNormalised)
 
+	queryCreateTxNormalized := `
+		CREATE TABLE IF NOT EXISTS transactions_normalized (
+			account TEXT,
+			time TIMESTAMP WITH TIME ZONE
+		);
+	`
+	migrations = append(migrations, queryCreateTxNormalized)
+
 	for _, query := range migrations {
 		_, err := postgresConn.Exec(ctx, query)
 		if err != nil {
