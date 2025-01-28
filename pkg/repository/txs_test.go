@@ -934,14 +934,19 @@ func Test_GetVotes(t *testing.T) {
 	votes := `INSERT INTO votes_normalized(hash, weight, proposal_id, height, timestamp, option, voter)
 		VALUES('hash1', '1000', '2', 900, $1, 'YES', 'voter1'),
 			  ('hash2', '500', '3', 901, $1, 'NO', 'voter1'),
-			  ('hash3', '200', '4', 902, $1, 'YES', 'voter2');`
+			  ('hash3', '200', '4', 902, $1, 'YES', 'voter2'),
+			  ('hash4', '200', '5', 902, $1, 'YES', 'voter5'),
+			  ('hash5', '200', '6', 902, $1, 'YES', 'voter5'),
+			  ('hash6', '200', '6', 902, $1, 'YES', 'voter5'),
+			  ('hash7', '200', '7', 902, $1, 'YES', 'voter5'),
+			  ('hash8', '200', '7', 902, $1, 'YES', 'voter5');`
 	_, err := postgresConn.Exec(context.Background(), votes, time.Now().UTC())
 	require.NoError(t, err)
 
 	txsRepo := NewTxs(postgresConn)
 
 	t.Run("returns votes for a given voter", func(t *testing.T) {
-		res, total, err := txsRepo.GetVotes(context.Background(), "voter1", 100, 0)
+		res, total, err := txsRepo.GetVotes(context.Background(), "voter1", false, 100, 0)
 		require.NoError(t, err)
 		require.Equal(t, int64(2), total)
 		require.Len(t, res, 2)
@@ -950,14 +955,14 @@ func Test_GetVotes(t *testing.T) {
 	})
 
 	t.Run("returns empty result for a voter with no votes", func(t *testing.T) {
-		res, total, err := txsRepo.GetVotes(context.Background(), "voter3", 100, 0)
+		res, total, err := txsRepo.GetVotes(context.Background(), "voter3", false, 100, 0)
 		require.NoError(t, err)
 		require.Equal(t, int64(0), total)
 		require.Len(t, res, 0)
 	})
 
 	t.Run("returns votes with correct proposal ID", func(t *testing.T) {
-		res, total, err := txsRepo.GetVotes(context.Background(), "voter2", 100, 0)
+		res, total, err := txsRepo.GetVotes(context.Background(), "voter2", false, 100, 0)
 		require.NoError(t, err)
 		require.Equal(t, int64(1), total)
 		require.Len(t, res, 1)
@@ -970,9 +975,19 @@ func Test_GetVotes(t *testing.T) {
 		_, err := postgresConn.Exec(context.Background(), invalidVotes, time.Now().UTC())
 		require.NoError(t, err)
 
-		_, _, err = txsRepo.GetVotes(context.Background(), "voter4", 100, 0)
+		_, _, err = txsRepo.GetVotes(context.Background(), "voter4", false, 100, 0)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid proposal ID")
+	})
+
+	t.Run("returns unique votes on proposals", func(t *testing.T) {
+		res, total, err := txsRepo.GetVotes(context.Background(), "voter5", true, 100, 0)
+		require.NoError(t, err)
+		require.Equal(t, int64(3), total)
+		require.Len(t, res, 3)
+		require.Equal(t, 5, res[0].ProposalID)
+		require.Equal(t, 6, res[1].ProposalID)
+		require.Equal(t, 7, res[2].ProposalID)
 	})
 }
 
