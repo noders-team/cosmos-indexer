@@ -29,7 +29,7 @@ type Txs interface {
 	GetSenderAndReceiver(ctx context.Context, hash string) (*model.TxSenderReceiver, error)
 	ChartTransactionsByHour(ctx context.Context, to time.Time) (*model.TxByHourWithCount, error)
 	ChartTransactionsVolume(ctx context.Context, to time.Time) ([]*model.TxVolumeByHour, error)
-	GetVotes(ctx context.Context, accountAddress string, limit int64, offset int64) ([]*model.VotesTransaction, int64, error)
+	GetVotes(ctx context.Context, accountAddress string, uniqueProposals bool, limit int64, offset int64) ([]*model.VotesTransaction, int64, error)
 	GetPowerEvents(ctx context.Context, accountAddress string,
 		limit int64, offset int64) ([]*model.Tx, int64, error)
 	GetValidatorHistoryEvents(ctx context.Context, accountAddress string,
@@ -142,8 +142,8 @@ func (s *txs) ChartTransactionsVolume(ctx context.Context, to time.Time) ([]*mod
 	return s.txRepo.ChartTransactionsVolume(ctx, to)
 }
 
-func (s *txs) GetVotes(ctx context.Context, accountAddress string, limit int64, offset int64) ([]*model.VotesTransaction, int64, error) {
-	return s.txRepo.GetVotes(ctx, accountAddress, limit, offset)
+func (s *txs) GetVotes(ctx context.Context, accountAddress string, uniqueProposals bool, limit int64, offset int64) ([]*model.VotesTransaction, int64, error) {
+	return s.txRepo.GetVotes(ctx, accountAddress, uniqueProposals, limit, offset)
 }
 
 func (s *txs) GetPowerEvents(ctx context.Context, accountAddress string, limit int64, offset int64) ([]*model.Tx, int64, error) {

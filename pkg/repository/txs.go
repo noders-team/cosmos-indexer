@@ -39,7 +39,7 @@ type Txs interface {
 		limit int64, offset int64) ([]*model.Tx, int64, error)
 	TransactionsByEventValue(ctx context.Context, values []string, messageType []string, includeEvents bool,
 		limit int64, offset int64) ([]*model.Tx, int64, error)
-	GetVotes(ctx context.Context, accountAddress string, limit int64, offset int64) ([]*model.VotesTransaction, int64, error)
+	GetVotes(ctx context.Context, accountAddress string, uniqueProposals bool, limit int64, offset int64) ([]*model.VotesTransaction, int64, error)
 	GetVotesByAccounts(ctx context.Context, accounts []string, excludeAccounts bool, voteOption string,
 		proposalID int, byAccAddress *string, limit int64, offset int64, sortBy *model.SortBy) ([]*model.VotesTransaction, int64, error)
 	GetWalletsCountPerPeriod(ctx context.Context, startDate, endDate time.Time) (int64, error)
@@ -1091,12 +1091,21 @@ order by txes.message_type_index, txes.message_event_attr_index`
 	return data, nil
 }
 
-func (r *txs) GetVotes(ctx context.Context, accountAddress string, limit int64, offset int64) ([]*model.VotesTransaction, int64, error) {
+func (r *txs) GetVotes(ctx context.Context, accountAddress string, uniqueProposals bool, limit int64, offset int64) ([]*model.VotesTransaction, int64, error) {
 	voterQuery := `SELECT timestamp, hash, height, voter, proposal_id, option, weight 
 					FROM votes_normalized 
 					WHERE voter=$1 
 					ORDER BY timestamp DESC 
 					LIMIT $2 OFFSET $3;`
+
+	if uniqueProposals {
+		voterQuery = `SELECT DISTINCT ON (proposal_id) timestamp, hash, height, voter, proposal_id, option, weight 
+               FROM votes_normalized 
+               WHERE voter=$1 
+               ORDER BY proposal_id, timestamp DESC 
+               LIMIT $2 OFFSET $3;`
+	}
+
 	rows, err := r.db.Query(ctx, voterQuery, accountAddress, limit, offset)
 	if err != nil {
 		return nil, 0, err
@@ -1129,6 +1138,9 @@ func (r *txs) GetVotes(ctx context.Context, accountAddress string, limit int64, 
 	}
 
 	countQuery := `SELECT COUNT(*) FROM votes_normalized WHERE voter=$1;`
+	if uniqueProposals {
+		countQuery = `SELECT COUNT(DISTINCT proposal_id) FROM votes_normalized WHERE voter=$1;`
+	}
 	var total int64
 	if err = r.db.QueryRow(ctx, countQuery, accountAddress).Scan(&total); err != nil {
 		return nil, 0, err

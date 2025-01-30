@@ -514,7 +514,7 @@ func (r *blocksServer) UptimeByBlocks(ctx context.Context, in *pb.UptimeByBlocks
 }
 
 func (r *blocksServer) GetVotes(ctx context.Context, in *pb.GetVotesRequest) (*pb.GetVotesResponse, error) {
-	txs, all, err := r.srvTx.GetVotes(ctx, in.ValidatorAccountAddress, in.Limit.Limit, in.Limit.Offset)
+	txs, all, err := r.srvTx.GetVotes(ctx, in.ValidatorAccountAddress, in.UniqueProposals, in.Limit.Limit, in.Limit.Offset)
 	if err != nil {
 		return &pb.GetVotesResponse{}, err
 	}
