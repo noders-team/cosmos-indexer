@@ -389,7 +389,8 @@ message VotesTransaction{
 
 message GetVotesRequest{
   string validator_account_address = 1;
-  Limit limit = 2;
+  bool unique_proposals = 2;
+  Limit limit = 3;
 }
 
 message GetVotesResponse{

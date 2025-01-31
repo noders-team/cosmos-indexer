@@ -630,6 +630,201 @@ INSERT INTO message_event_attributes(id, message_event_id, value, index, message
 	}
 }
 
+func TestTxs_GetWalletsCount(t *testing.T) {
+	ctx := context.Background()
+
+	type expected struct {
+		totalWallets *model.TotalWallets
+		err          error
+	}
+
+	sampleData := `
+		INSERT INTO transactions_normalized (account, time)
+		VALUES 
+			('account1', $1),
+			('account2', $2),
+			('account1', $3),
+			('account3', $4),
+			('account4', $5),
+			('account5', $6);
+	`
+
+	baseTime := time.Now().UTC()
+
+	tests := []struct {
+		name     string
+		expected expected
+		before   func()
+		after    func()
+	}{
+		{
+			name: "success_with_data",
+			expected: expected{
+				totalWallets: &model.TotalWallets{
+					Total:    5,
+					Count24H: 1,
+					Count48H: 3,
+					Count30D: 4,
+				},
+				err: nil,
+			},
+			before: func() {
+				_, err := postgresConn.Exec(ctx, sampleData,
+					baseTime.Add(-25*time.Hour),
+					baseTime.Add(-20*time.Hour),
+					baseTime.Add(-15*time.Hour),
+					baseTime.Add(-10*time.Hour),
+					baseTime.Add(-5*time.Hour),
+					baseTime.Add(-720*time.Hour), // 30 days ago
+				)
+				require.NoError(t, err)
+			},
+			after: func() {
+				_, err := postgresConn.Exec(ctx, `DELETE FROM transactions_normalized`)
+				require.NoError(t, err)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.before()
+			txsRepo := NewTxs(postgresConn)
+			result, err := txsRepo.GetWalletsCount(ctx)
+			if tt.expected.err != nil {
+				require.Error(t, err)
+				require.Equal(t, tt.expected.err.Error(), err.Error())
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, tt.expected.totalWallets, result)
+			tt.after()
+		})
+	}
+}
+
+func TestTxs_GetWalletsCountPerPeriod(t *testing.T) {
+	ctx := context.Background()
+
+	type expected struct {
+		count int64
+		err   error
+	}
+
+	type params struct {
+		startDate time.Time
+		endDate   time.Time
+	}
+
+	sampleData := `
+		INSERT INTO transactions_normalized (account, time)
+		VALUES 
+			('account1', $1),
+			('account2', $2),
+			('account1', $3),
+			('account3', $4),
+			('account4', $5);
+	`
+
+	tests := []struct {
+		name     string
+		expected expected
+		params   params
+		before   func()
+		after    func()
+	}{
+		{
+			name: "success_all_accounts",
+			expected: expected{
+				count: 4,
+				err:   nil,
+			},
+			params: params{
+				startDate: time.Now().UTC().Add(-24 * time.Hour),
+				endDate:   time.Now().UTC(),
+			},
+			before: func() {
+				now := time.Now().UTC()
+				_, err := postgresConn.Exec(ctx, sampleData,
+					now.Add(-25*time.Hour),
+					now.Add(-20*time.Hour),
+					now.Add(-15*time.Hour),
+					now.Add(-10*time.Hour),
+					now.Add(-5*time.Hour),
+				)
+				require.NoError(t, err)
+			},
+			after: func() {
+				_, err := postgresConn.Exec(ctx, `DELETE FROM transactions_normalized`)
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "success_partial_accounts",
+			expected: expected{
+				count: 3,
+				err:   nil,
+			},
+			params: params{
+				startDate: time.Now().UTC().Add(-18 * time.Hour),
+				endDate:   time.Now().UTC().Add(-8 * time.Hour),
+			},
+			before: func() {
+				now := time.Now().UTC()
+				_, err := postgresConn.Exec(ctx, sampleData,
+					now.Add(-25*time.Hour),
+					now.Add(-20*time.Hour),
+					now.Add(-15*time.Hour),
+					now.Add(-10*time.Hour),
+					now.Add(-5*time.Hour),
+				)
+				require.NoError(t, err)
+			},
+			after: func() {
+				_, err := postgresConn.Exec(ctx, `DELETE FROM transactions_normalized`)
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "success_no_accounts",
+			expected: expected{
+				count: 0,
+				err:   nil,
+			},
+			params: params{
+				startDate: time.Now().UTC().Add(-50 * time.Hour),
+				endDate:   time.Now().UTC().Add(-40 * time.Hour),
+			},
+			before: func() {
+				now := time.Now().UTC()
+				_, err := postgresConn.Exec(ctx, sampleData,
+					now.Add(-25*time.Hour),
+					now.Add(-20*time.Hour),
+					now.Add(-15*time.Hour),
+					now.Add(-10*time.Hour),
+					now.Add(-5*time.Hour),
+				)
+				require.NoError(t, err)
+			},
+			after: func() {
+				_, err := postgresConn.Exec(ctx, `DELETE FROM transactions_normalized`)
+				require.NoError(t, err)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.before()
+			txsRepo := NewTxs(postgresConn)
+			count, err := txsRepo.GetWalletsCountPerPeriod(ctx, tt.params.startDate, tt.params.endDate)
+			require.Equal(t, tt.expected.err, err)
+			require.Equal(t, tt.expected.count, count)
+			tt.after()
+		})
+	}
+}
+
 func TestTxs_DelegatesByValidator(t *testing.T) {
 	defer func() {
 		_, err := postgresConn.Exec(context.Background(), `delete from txes`)
@@ -739,14 +934,19 @@ func Test_GetVotes(t *testing.T) {
 	votes := `INSERT INTO votes_normalized(hash, weight, proposal_id, height, timestamp, option, voter)
 		VALUES('hash1', '1000', '2', 900, $1, 'YES', 'voter1'),
 			  ('hash2', '500', '3', 901, $1, 'NO', 'voter1'),
-			  ('hash3', '200', '4', 902, $1, 'YES', 'voter2');`
+			  ('hash3', '200', '4', 902, $1, 'YES', 'voter2'),
+			  ('hash4', '200', '5', 902, $1, 'YES', 'voter5'),
+			  ('hash5', '200', '6', 902, $1, 'YES', 'voter5'),
+			  ('hash6', '200', '6', 902, $1, 'YES', 'voter5'),
+			  ('hash7', '200', '7', 902, $1, 'YES', 'voter5'),
+			  ('hash8', '200', '7', 902, $1, 'YES', 'voter5');`
 	_, err := postgresConn.Exec(context.Background(), votes, time.Now().UTC())
 	require.NoError(t, err)
 
 	txsRepo := NewTxs(postgresConn)
 
 	t.Run("returns votes for a given voter", func(t *testing.T) {
-		res, total, err := txsRepo.GetVotes(context.Background(), "voter1", 100, 0)
+		res, total, err := txsRepo.GetVotes(context.Background(), "voter1", false, 100, 0)
 		require.NoError(t, err)
 		require.Equal(t, int64(2), total)
 		require.Len(t, res, 2)
@@ -755,14 +955,14 @@ func Test_GetVotes(t *testing.T) {
 	})
 
 	t.Run("returns empty result for a voter with no votes", func(t *testing.T) {
-		res, total, err := txsRepo.GetVotes(context.Background(), "voter3", 100, 0)
+		res, total, err := txsRepo.GetVotes(context.Background(), "voter3", false, 100, 0)
 		require.NoError(t, err)
 		require.Equal(t, int64(0), total)
 		require.Len(t, res, 0)
 	})
 
 	t.Run("returns votes with correct proposal ID", func(t *testing.T) {
-		res, total, err := txsRepo.GetVotes(context.Background(), "voter2", 100, 0)
+		res, total, err := txsRepo.GetVotes(context.Background(), "voter2", false, 100, 0)
 		require.NoError(t, err)
 		require.Equal(t, int64(1), total)
 		require.Len(t, res, 1)
@@ -775,9 +975,19 @@ func Test_GetVotes(t *testing.T) {
 		_, err := postgresConn.Exec(context.Background(), invalidVotes, time.Now().UTC())
 		require.NoError(t, err)
 
-		_, _, err = txsRepo.GetVotes(context.Background(), "voter4", 100, 0)
+		_, _, err = txsRepo.GetVotes(context.Background(), "voter4", false, 100, 0)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid proposal ID")
+	})
+
+	t.Run("returns unique votes on proposals", func(t *testing.T) {
+		res, total, err := txsRepo.GetVotes(context.Background(), "voter5", true, 100, 0)
+		require.NoError(t, err)
+		require.Equal(t, int64(3), total)
+		require.Len(t, res, 3)
+		require.Equal(t, 5, res[0].ProposalID)
+		require.Equal(t, 6, res[1].ProposalID)
+		require.Equal(t, 7, res[2].ProposalID)
 	})
 }
 

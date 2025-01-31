@@ -33,6 +33,11 @@ jobs:
           GO_MOD_FILE=${{ vars.GO_MOD_FILE || 'go.mod.or' }}
           mv $GO_MOD_FILE go.mod
 
+      - name: Run go mod tidy
+        run: |
+          go mod tidy
+          go mod vendor
+
       - name: Build Docker Image
         run: sudo docker build -t ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }} --build-arg TARGETPLATFORM=linux/amd64 .
 

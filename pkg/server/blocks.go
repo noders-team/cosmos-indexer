@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -22,14 +23,17 @@ import (
 
 type blocksServer struct {
 	pb.UnimplementedBlocksServiceServer
-	srv   service.Blocks
-	srvTx service.Txs
-	srvS  service.Search
-	cache repository.Cache
+	srv           service.Blocks
+	srvTx         service.Txs
+	srvS          service.Search
+	cache         repository.Cache
+	srvAggregates service.Aggregates
 }
 
-func NewBlocksServer(srv service.Blocks, srvTx service.Txs, srvS service.Search, cache repository.Cache) *blocksServer { //nolint: revive
-	return &blocksServer{srv: srv, srvTx: srvTx, srvS: srvS, cache: cache}
+func NewBlocksServer(srv service.Blocks, srvTx service.Txs, srvS service.Search,
+	cache repository.Cache, srvAggregates service.Aggregates,
+) *blocksServer { //nolint: revive
+	return &blocksServer{srv: srv, srvTx: srvTx, srvS: srvS, cache: cache, srvAggregates: srvAggregates}
 }
 
 func (r *blocksServer) BlockInfo(ctx context.Context, in *pb.GetBlockInfoRequest) (*pb.GetBlockInfoResponse, error) {
@@ -379,9 +383,10 @@ func (r *blocksServer) toSignerInfosProto(signs []*model.SignerInfo) []*pb.Signe
 func (r *blocksServer) CacheAggregated(ctx context.Context,
 	_ *pb.CacheAggregatedRequest,
 ) (*pb.CacheAggregatedResponse, error) {
-	info, err := r.cache.GetTotals(ctx)
+	info, err := r.srvAggregates.GetTotals(ctx)
 	if err != nil {
-		return &pb.CacheAggregatedResponse{}, err
+		log.Err(err).Msgf("failed to get totals from cache, requesting new %v", err)
+		return &pb.CacheAggregatedResponse{}, errors.New("totals not found")
 	}
 
 	// TODO not the best place
@@ -509,7 +514,7 @@ func (r *blocksServer) UptimeByBlocks(ctx context.Context, in *pb.UptimeByBlocks
 }
 
 func (r *blocksServer) GetVotes(ctx context.Context, in *pb.GetVotesRequest) (*pb.GetVotesResponse, error) {
-	txs, all, err := r.srvTx.GetVotes(ctx, in.ValidatorAccountAddress, in.Limit.Limit, in.Limit.Offset)
+	txs, all, err := r.srvTx.GetVotes(ctx, in.ValidatorAccountAddress, in.UniqueProposals, in.Limit.Limit, in.Limit.Offset)
 	if err != nil {
 		return &pb.GetVotesResponse{}, err
 	}
