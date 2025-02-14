@@ -20,6 +20,7 @@ jobs:
           - story-testnet-prod
           - babylon-testnet-prod
           - berachain-prod
+          - nillion-prod
 
     environment: ${{ matrix.environment }}
 
@@ -63,6 +64,7 @@ jobs:
           - story-testnet-prod
           - babylon-testnet-prod
           - berachain-prod
+          - nillion-prod
 
     environment: ${{ matrix.environment }}
 
