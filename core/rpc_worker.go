@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/base64"
 	"encoding/json"
+	"github.com/noders-team/cosmos-indexer/probe"
 	"net/http"
 	"sync"
 	"time"
@@ -18,8 +19,6 @@ import (
 	"github.com/noders-team/cosmos-indexer/config"
 	dbTypes "github.com/noders-team/cosmos-indexer/db"
 	"github.com/noders-team/cosmos-indexer/rpc"
-	"github.com/nodersteam/probe/client"
-	probeClient "github.com/nodersteam/probe/client"
 	"gorm.io/gorm"
 )
 
@@ -32,7 +31,7 @@ type IndexerBlockEventData struct {
 	IndexTransactions        bool
 }
 
-func (s *IndexerBlockEventData) MarshalJSON(cdc *probeClient.Codec) ([]byte, error) {
+func (s *IndexerBlockEventData) MarshalJSON(cdc *probe.Codec) ([]byte, error) {
 	txResp, err := cdc.Marshaler.Marshal(s.GetTxsResponse)
 	if err != nil {
 		return nil, err
@@ -136,7 +135,7 @@ type BlockRPCWorker interface {
 type blockRPCWorker struct {
 	chainStringID string
 	cfg           *config.IndexConfig
-	chainClient   *client.ChainClient
+	chainClient   *probe.ChainClient
 	db            *gorm.DB
 	rpcClient     clients.ChainRPC
 }
@@ -144,7 +143,7 @@ type blockRPCWorker struct {
 func NewBlockRPCWorker(
 	chainStringID string,
 	cfg *config.IndexConfig,
-	chainClient *client.ChainClient,
+	chainClient *probe.ChainClient,
 	db *gorm.DB,
 	rpcClient clients.ChainRPC,
 ) BlockRPCWorker {

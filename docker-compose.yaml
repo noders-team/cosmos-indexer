@@ -85,14 +85,14 @@ services:
       cosmos-indexer index \
       --log.pretty = true \
       --log.level = info \
-      --base.start-block 9568000 \
+      --base.start-block 1 \
       --base.end-block -1 \
       --base.throttling 2.005 \
       --base.rpc-workers 1 \
       --base.index-transactions true \
-      --probe.rpc https://nillion-testnet.rpc.kjnodes.com  \
-      --probe.account-prefix nillion \
-      --probe.chain-id nillion-chain-testnet-1 \
+      --probe.rpc http://168.119.208.253:26657  \
+      --probe.account-prefix bera \
+      --probe.chain-id 0x138de \
       --probe.chain-name nil \
       --database.host postgres \
       --database.database postgres \

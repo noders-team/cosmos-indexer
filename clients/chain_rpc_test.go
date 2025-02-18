@@ -21,3 +21,17 @@ func Test_GetTxsByBlockHeight(t *testing.T) {
 	require.Len(t, resp.Txs, 723)
 	require.Len(t, resp.TxResponses, 723)
 }
+
+func Test_GetTxsByBlockHeightBera(t *testing.T) {
+	cl := probe.GetProbeClient(config.Probe{
+		AccountPrefix: "bera",
+		ChainName:     "bera",
+		ChainID:       "bera",
+		RPC:           "http://celestia-mainnet-consensus.itrocket.net:26657",
+	})
+	rpc := NewChainRPC(cl)
+	resp, err := rpc.GetTxsByBlockHeight(1000)
+	require.NoError(t, err)
+	require.Len(t, resp.Txs, 723)
+	require.Len(t, resp.TxResponses, 723)
+}

@@ -2,13 +2,13 @@ package tx
 
 import (
 	"fmt"
+	cryptoTypes "github.com/cosmos/cosmos-sdk/crypto/types"
+	"github.com/noders-team/cosmos-indexer/probe"
 	"math/big"
 	"time"
 
 	"github.com/noders-team/cosmos-indexer/pkg/model"
 
-	"github.com/cosmos/cosmos-sdk/crypto/keys/multisig"
-	cryptoTypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	"github.com/cosmos/cosmos-sdk/types"
 	cosmosTx "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/noders-team/cosmos-indexer/config"
@@ -16,7 +16,6 @@ import (
 	dbTypes "github.com/noders-team/cosmos-indexer/db"
 	"github.com/noders-team/cosmos-indexer/db/models"
 	"github.com/noders-team/cosmos-indexer/util"
-	"github.com/nodersteam/probe/client"
 	"github.com/rs/zerolog/log"
 )
 
@@ -33,10 +32,10 @@ type Processor interface {
 }
 
 type processor struct {
-	cl *client.ChainClient
+	cl *probe.ChainClient
 }
 
-func NewProcessor(cl *client.ChainClient) Processor {
+func NewProcessor(cl *probe.ChainClient) Processor {
 	return &processor{cl: cl}
 }
 
@@ -107,32 +106,45 @@ func (a *processor) ProcessSigners(authInfo *cosmosTx.AuthInfo,
 				return nil, nil, err
 			}
 
-			multisigKey, ok := pubKey.(*multisig.LegacyAminoPubKey)
+			/*
+				multisigKey, ok := pubKey.(*multisig.LegacyAminoPubKey)
 
-			if ok {
-				for _, key := range multisigKey.GetPubKeys() {
-					address := types.AccAddress(key.Address().Bytes()).String()
+				if ok {
+					for _, key := range multisigKey.GetPubKeys() {
+						address := types.AccAddress(key.Address().Bytes()).String()
+						if _, ok := signerAddressMap[address]; !ok {
+							signerAddressArray = append(signerAddressArray, models.Address{Address: address})
+						}
+						signerAddr := models.Address{Address: address}
+						signerAddressMap[address] = signerAddr
+						info.Address = &signerAddr
+					}
+				} else {
+					castPubKey, ok := pubKey.(cryptoTypes.PubKey)
+					if !ok {
+						return nil, nil, err
+					}
+
+					address := types.AccAddress(castPubKey.Address().Bytes()).String()
 					if _, ok := signerAddressMap[address]; !ok {
 						signerAddressArray = append(signerAddressArray, models.Address{Address: address})
 					}
 					signerAddr := models.Address{Address: address}
 					signerAddressMap[address] = signerAddr
 					info.Address = &signerAddr
-				}
-			} else {
-				castPubKey, ok := pubKey.(cryptoTypes.PubKey)
-				if !ok {
-					return nil, nil, err
-				}
-
-				address := types.AccAddress(castPubKey.Address().Bytes()).String()
-				if _, ok := signerAddressMap[address]; !ok {
-					signerAddressArray = append(signerAddressArray, models.Address{Address: address})
-				}
-				signerAddr := models.Address{Address: address}
-				signerAddressMap[address] = signerAddr
-				info.Address = &signerAddr
+				}*/
+			castPubKey, ok := pubKey.(cryptoTypes.PubKey)
+			if !ok {
+				return nil, nil, err
 			}
+
+			address := types.AccAddress(castPubKey.Address().Bytes()).String()
+			if _, ok := signerAddressMap[address]; !ok {
+				signerAddressArray = append(signerAddressArray, models.Address{Address: address})
+			}
+			signerAddr := models.Address{Address: address}
+			signerAddressMap[address] = signerAddr
+			info.Address = &signerAddr
 
 			info.Sequence = signerInfo.Sequence
 			info.ModeInfo = signerInfo.ModeInfo.String()
