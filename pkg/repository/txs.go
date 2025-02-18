@@ -41,7 +41,7 @@ type Txs interface {
 		limit int64, offset int64) ([]*model.Tx, int64, error)
 	GetVotes(ctx context.Context, accountAddress string, uniqueProposals bool, limit int64, offset int64) ([]*model.VotesTransaction, int64, error)
 	GetVotesByAccounts(ctx context.Context, accounts []string, excludeAccounts bool, voteOption string,
-		proposalID int, byAccAddress *string, limit int64, offset int64, sortBy *model.SortBy) ([]*model.VotesTransaction, int64, error)
+		proposalID int, uniqueVotes bool, byAccAddress *string, limit int64, offset int64, sortBy *model.SortBy) ([]*model.VotesTransaction, int64, error)
 	GetWalletsCountPerPeriod(ctx context.Context, startDate, endDate time.Time) (int64, error)
 	GetWalletsWithTx(ctx context.Context, limit int64, offset int64) ([]*model.WalletWithTxs, int64, error)
 	TxCountByAccounts(ctx context.Context, accounts []string) ([]*model.WalletWithTxs, error)
@@ -1150,7 +1150,7 @@ func (r *txs) GetVotes(ctx context.Context, accountAddress string, uniqueProposa
 }
 
 func (r *txs) GetVotesByAccounts(ctx context.Context, accounts []string, excludeAccounts bool, voteOption string,
-	proposalID int, byAccAddress *string, limit int64, offset int64, sortBy *model.SortBy,
+	proposalID int, uniqueVotes bool, byAccAddress *string, limit int64, offset int64, sortBy *model.SortBy,
 ) ([]*model.VotesTransaction, int64, error) {
 	dialect := goqu.Select(
 		"vn.hash",

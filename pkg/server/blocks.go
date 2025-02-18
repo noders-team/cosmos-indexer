@@ -623,7 +623,7 @@ func (r *blocksServer) GetVotesByAccounts(ctx context.Context,
 	}
 
 	transactions, all, err := r.srvTx.GetVotesByAccounts(ctx, in.Accounts, in.Exclude,
-		in.VoteType, int(in.ProposalID), in.AccountAddr, in.Limit.Limit, in.Limit.Offset, sortBy)
+		in.VoteType, int(in.ProposalID), in.UniqueVotes, in.AccountAddr, in.Limit.Limit, in.Limit.Offset, sortBy)
 	if err != nil {
 		return &pb.GetVotesByAccountsResponse{}, err
 	}

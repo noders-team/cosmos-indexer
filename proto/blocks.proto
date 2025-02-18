@@ -434,9 +434,10 @@ message GetVotesByAccountsRequest{
   bool exclude = 2;
   string vote_type = 3;
   int32 proposalID = 4;
-  Limit limit = 5;
-  optional string account_addr = 6;
-  optional SortBy sort = 7;
+  bool unique_votes = 5;
+  Limit limit = 6;
+  optional string account_addr = 7;
+  optional SortBy sort = 8;
 }
 
 message GetVotesByAccountsResponse{
