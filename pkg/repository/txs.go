@@ -1198,7 +1198,6 @@ func (r *txs) GetVotesByAccounts(ctx context.Context, accounts []string, exclude
 	if err != nil {
 		return nil, 0, err
 	}
-	fmt.Printf("111111111111111 %s", query)
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		log.Err(err).Msgf("error getting votes by accounts")
