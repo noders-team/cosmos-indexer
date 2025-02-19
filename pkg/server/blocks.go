@@ -622,8 +622,13 @@ func (r *blocksServer) GetVotesByAccounts(ctx context.Context,
 		}
 	}
 
+	var voteUnique *bool
+	if in.VoteUnique == nil {
+		in.VoteUnique = voteUnique
+	}
+
 	transactions, all, err := r.srvTx.GetVotesByAccounts(ctx, in.Accounts, in.Exclude,
-		in.VoteType, int(in.ProposalID), in.UniqueVotes, in.AccountAddr, in.Limit.Limit, in.Limit.Offset, sortBy)
+		in.VoteType, int(in.ProposalID), in.AccountAddr, in.VoteUnique, in.Limit.Limit, in.Limit.Offset, sortBy)
 	if err != nil {
 		return &pb.GetVotesByAccountsResponse{}, err
 	}
