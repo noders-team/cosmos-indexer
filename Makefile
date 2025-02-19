@@ -32,7 +32,8 @@ up:
 	docker-compose up --build
 
 up-dev:
-	docker-compose -f docker-compose-dev.yml up -d
+	docker network inspect indexer_network >/dev/null 2>&1 || docker network create indexer_network
+	sudo docker compose -f docker-compose-dev.yml up -d
 
 clean:
 	rm -rf build
