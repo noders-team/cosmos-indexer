@@ -1,6 +1,9 @@
 package clients
 
 import (
+	"context"
+	"github.com/noders-team/cosmos-indexer/probe"
+	"github.com/noders-team/cosmos-indexer/probe/query"
 	"math"
 	"time"
 
@@ -9,8 +12,6 @@ import (
 	txTypes "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/noders-team/cosmos-indexer/config"
 	"github.com/noders-team/cosmos-indexer/rpc"
-	probeClient "github.com/nodersteam/probe/client"
-	probeQuery "github.com/nodersteam/probe/query"
 )
 
 type ChainRPC interface {
@@ -20,19 +21,20 @@ type ChainRPC interface {
 	GetLatestBlockHeight() (int64, error)
 	GetLatestBlockHeightWithRetry(retryMaxAttempts int64, retryMaxWaitSeconds uint64) (int64, error)
 	GetEarliestAndLatestBlockHeights() (int64, int64, error)
+	TxDecode(ctx context.Context, txBytes *[]byte) (*txTypes.TxDecodeResponse, error)
 }
 
 type chainRPC struct {
-	cl *probeClient.ChainClient
+	cl *probe.ChainClient
 }
 
-func NewChainRPC(cl *probeClient.ChainClient) ChainRPC {
+func NewChainRPC(cl *probe.ChainClient) ChainRPC {
 	return &chainRPC{cl: cl}
 }
 
 func (c *chainRPC) GetBlock(height int64) (*coretypes.ResultBlock, error) {
-	options := probeQuery.QueryOptions{Height: height}
-	q := probeQuery.Query{Client: c.cl, Options: &options}
+	options := query.QueryOptions{Height: height}
+	q := query.Query{Client: c.cl, Options: &options}
 	resp, err := q.Block()
 	if err != nil {
 		return nil, err
@@ -47,7 +49,7 @@ func (c *chainRPC) GetTxsByBlockHeight(height int64) (*txTypes.GetTxsEventRespon
 
 	limit := uint64(100)
 	pageNum := uint64(1)
-	q := probeQuery.Query{Client: c.cl, Options: &probeQuery.QueryOptions{Height: height}}
+	q := query.Query{Client: c.cl, Options: &query.QueryOptions{Height: height}}
 	resp, err := q.TxByHeight(c.cl.Codec, pageNum, limit)
 	if err != nil {
 		return nil, err
@@ -80,7 +82,7 @@ func (c *chainRPC) GetTxsByBlockHeight(height int64) (*txTypes.GetTxsEventRespon
 }
 
 func (c *chainRPC) IsCatchingUp() (bool, error) {
-	query := probeQuery.Query{Client: c.cl, Options: &probeQuery.QueryOptions{}}
+	query := query.Query{Client: c.cl, Options: &query.QueryOptions{}}
 	ctx, cancel := query.GetQueryContext()
 	defer cancel()
 
@@ -92,7 +94,7 @@ func (c *chainRPC) IsCatchingUp() (bool, error) {
 }
 
 func (c *chainRPC) GetLatestBlockHeight() (int64, error) {
-	q := probeQuery.Query{Client: c.cl, Options: &probeQuery.QueryOptions{}}
+	q := query.Query{Client: c.cl, Options: &query.QueryOptions{}}
 	ctx, cancel := q.GetQueryContext()
 	defer cancel()
 
@@ -144,7 +146,7 @@ func (c *chainRPC) GetLatestBlockHeightWithRetry(retryMaxAttempts int64, retryMa
 }
 
 func (c *chainRPC) GetEarliestAndLatestBlockHeights() (int64, int64, error) {
-	q := probeQuery.Query{Client: c.cl, Options: &probeQuery.QueryOptions{}}
+	q := query.Query{Client: c.cl, Options: &query.QueryOptions{}}
 	ctx, cancel := q.GetQueryContext()
 	defer cancel()
 
@@ -153,4 +155,9 @@ func (c *chainRPC) GetEarliestAndLatestBlockHeights() (int64, int64, error) {
 		return 0, 0, err
 	}
 	return resStatus.SyncInfo.EarliestBlockHeight, resStatus.SyncInfo.LatestBlockHeight, nil
+}
+
+func (c *chainRPC) TxDecode(ctx context.Context, txBytes *[]byte) (*txTypes.TxDecodeResponse, error) {
+	q := query.Query{Client: c.cl, Options: &query.QueryOptions{}}
+	return q.TxDecode(ctx, txBytes)
 }
