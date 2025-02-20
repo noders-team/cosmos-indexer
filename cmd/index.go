@@ -120,7 +120,7 @@ func setupIndex(cmd *cobra.Command, args []string) error {
 
 	db, err := connectToDBAndMigrate(indexer.cfg.Database)
 	if err != nil {
-		config.Log.Fatal("Could not establish connection to the database", err)
+		config.Log.Fatal("error migrating DB", err)
 	}
 
 	indexer.db = db
