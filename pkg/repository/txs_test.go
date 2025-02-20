@@ -875,28 +875,29 @@ func Test_GetVotesByAccounts(t *testing.T) {
 				      ('hash3', '2000', '2', 900, $1, 'ABSTAIN', 'voter3'),
 				      ('hash4', '2000', '2', 900, $1, 'NO_VETO', 'voter4'),
 				      ('hash5', '2000', '3', 900, $1, 'YES', 'voter4'),
-				      ('hash51', '2000', '3', 900, $1, 'YES', 'voter7')`
+				      ('hash51', '2000', '3', 900, $1, 'YES', 'voter4'),
+				      ('hash6', '2000', '3', 900, $1, 'YES', 'voter7')`
 	_, err := postgresConn.Exec(context.Background(), votes, time.Now().UTC())
 	require.NoError(t, err)
 
 	txsRepo := NewTxs(postgresConn)
 	res, all, err := txsRepo.GetVotesByAccounts(context.Background(),
 		[]string{"voter1"}, false,
-		"YES", 2, nil, 100, 0, nil)
+		"YES", 2, nil, nil, 100, 0, nil)
 	require.NoError(t, err)
 	require.Equal(t, all, int64(1))
 	require.Len(t, res, 1)
 
 	res, all, err = txsRepo.GetVotesByAccounts(context.Background(),
 		[]string{"voter1", "voter7"}, false,
-		"YES", 2, nil, 100, 0, nil)
+		"YES", 2, nil, nil, 100, 0, nil)
 	require.NoError(t, err)
 	require.Equal(t, all, int64(2))
 	require.Len(t, res, 2)
 
 	res, all, err = txsRepo.GetVotesByAccounts(context.Background(),
 		[]string{"voter1"}, true,
-		"YES", 2, nil, 100, 0, nil)
+		"YES", 2, nil, nil, 100, 0, nil)
 	require.NoError(t, err)
 	require.Equal(t, all, int64(1))
 	require.Len(t, res, 1)
@@ -904,21 +905,30 @@ func Test_GetVotesByAccounts(t *testing.T) {
 	filterBy := "voter7"
 	res, all, err = txsRepo.GetVotesByAccounts(context.Background(),
 		[]string{"voter1", "voter7"}, true,
-		"YES", 2, &filterBy, 100, 0, nil)
+		"YES", 2, &filterBy, nil, 100, 0, nil)
 	require.NoError(t, err)
 	require.Equal(t, all, int64(0))
 	require.Len(t, res, 0)
 
 	res, all, err = txsRepo.GetVotesByAccounts(context.Background(),
 		[]string{"voter1", "voter4"}, true,
-		"YES", 3, &filterBy, 100, 0, nil)
+		"YES", 3, &filterBy, nil, 100, 0, nil)
 	require.NoError(t, err)
 	require.Equal(t, all, int64(1))
 	require.Len(t, res, 1)
 
 	res, all, err = txsRepo.GetVotesByAccounts(context.Background(),
 		[]string{"voter1", "voter4"}, true,
-		"YES", 3, &filterBy, 100, 0,
+		"YES", 3, &filterBy, nil, 100, 0,
+		&model.SortBy{By: "timestamp", Direction: "desc"})
+	require.NoError(t, err)
+	require.Equal(t, all, int64(1))
+	require.Len(t, res, 1)
+
+	var uniqueVotes = true
+	res, all, err = txsRepo.GetVotesByAccounts(context.Background(),
+		[]string{"voter1", "voter4"}, true,
+		"YES", 3, nil, &uniqueVotes, 100, 0,
 		&model.SortBy{By: "timestamp", Direction: "desc"})
 	require.NoError(t, err)
 	require.Equal(t, all, int64(1))
