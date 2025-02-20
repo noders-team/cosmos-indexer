@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"context"
 	"github.com/noders-team/cosmos-indexer/probe"
 	"github.com/noders-team/cosmos-indexer/probe/query"
 	"math"
@@ -20,6 +21,7 @@ type ChainRPC interface {
 	GetLatestBlockHeight() (int64, error)
 	GetLatestBlockHeightWithRetry(retryMaxAttempts int64, retryMaxWaitSeconds uint64) (int64, error)
 	GetEarliestAndLatestBlockHeights() (int64, int64, error)
+	TxDecode(ctx context.Context, txBytes *[]byte) (*txTypes.TxDecodeResponse, error)
 }
 
 type chainRPC struct {
@@ -153,4 +155,9 @@ func (c *chainRPC) GetEarliestAndLatestBlockHeights() (int64, int64, error) {
 		return 0, 0, err
 	}
 	return resStatus.SyncInfo.EarliestBlockHeight, resStatus.SyncInfo.LatestBlockHeight, nil
+}
+
+func (c *chainRPC) TxDecode(ctx context.Context, txBytes *[]byte) (*txTypes.TxDecodeResponse, error) {
+	q := query.Query{Client: c.cl, Options: &query.QueryOptions{}}
+	return q.TxDecode(ctx, txBytes)
 }

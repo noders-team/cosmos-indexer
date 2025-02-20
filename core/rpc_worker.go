@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"github.com/noders-team/cosmos-indexer/probe"
@@ -223,6 +224,12 @@ func (w *blockRPCWorker) FetchBlock(rpcClient rpc.URIClient, block *EnqueueData)
 	}
 
 	if block.IndexTransactions {
+		txByted := []byte(blockData.Block.Txs[0].String())
+		res, err := w.rpcClient.TxDecode(context.Background(), &txByted)
+		if err != nil {
+			println(err.Error())
+		}
+		print(res)
 		txsEventResp, err := w.rpcClient.GetTxsByBlockHeight(block.Height)
 
 		if err != nil {

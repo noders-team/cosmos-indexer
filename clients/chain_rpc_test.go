@@ -30,7 +30,7 @@ func Test_GetTxsByBlockHeightBera(t *testing.T) {
 		RPC:           "http://celestia-mainnet-consensus.itrocket.net:26657",
 	})
 	rpc := NewChainRPC(cl)
-	resp, err := rpc.GetTxsByBlockHeight(1000)
+	resp, err := rpc.GetTxsByBlockHeight(1303383)
 	require.NoError(t, err)
 	require.Len(t, resp.Txs, 723)
 	require.Len(t, resp.TxResponses, 723)

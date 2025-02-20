@@ -99,7 +99,7 @@ func TestDecodingTxsBera(t *testing.T) {
 	probeCfg := config.Probe{
 		AccountPrefix: "bera",
 		ChainName:     "bera",
-		ChainID:       "0x138de",
+		ChainID:       "80094",
 		RPC:           "http://168.119.208.253:26657",
 	}
 	cl := probe.GetProbeClient(probeCfg)
@@ -117,7 +117,7 @@ func TestDecodingTxsBera(t *testing.T) {
 		nil, cl, nil, chainRpcClient)
 
 	blData := blockWorker.FetchBlock(rpcClient, &core.EnqueueData{
-		Height:            1000,
+		Height:            1326580,
 		IndexTransactions: true,
 	})
 	require.NotNil(t, blData)

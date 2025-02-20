@@ -46,3 +46,7 @@ func (q *Query) Status() (*coretypes.ResultStatus, error) {
 	/// TODO: In the future have some logic to route the query to the appropriate client (gRPC or RPC)
 	return StatusRPC(q)
 }
+
+func (q *Query) TxDecode(ctx context.Context, tx *[]byte) (*txTypes.TxDecodeResponse, error) {
+	return TxDecode(ctx, q, tx)
+}

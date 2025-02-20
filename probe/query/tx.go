@@ -1,6 +1,7 @@
 package query
 
 import (
+	"context"
 	"fmt"
 	"github.com/noders-team/cosmos-indexer/probe"
 
@@ -46,6 +47,25 @@ func TxsRPC(q *Query, req *txTypes.GetTxsEventRequest, codec probe.Codec) (*txTy
 		// We may want to pull out the unpacking logic into a separate function that can be called on each message individually but not fail hard
 		tx.UnpackInterfaces(codec.InterfaceRegistry)
 	}
+
+	return res, nil
+}
+
+func TxDecode(ctx context.Context, q *Query, tx *[]byte) (*txTypes.TxDecodeResponse, error) {
+	queryClient := txTypes.NewServiceClient(q.Client)
+	ctx, cancel := q.GetQueryContext()
+	defer cancel()
+
+	res, err := queryClient.TxDecode(ctx, &txTypes.TxDecodeRequest{TxBytes: *tx})
+	if err != nil {
+		return nil, err
+	}
+
+	res2, err := queryClient.GetTx(ctx, &txTypes.GetTxRequest{Hash: "16BDEABEEFA07FB1E9253808533919408FB74EC3FE1EBFBF0BB69DDA4D7D33A7"})
+	if err != nil {
+		return nil, err
+	}
+	print(res2)
 
 	return res, nil
 }
