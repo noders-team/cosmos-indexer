@@ -19,8 +19,8 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=password
       - POSTGRES_DB=indexer
-      - POSTGRES_MAX_CONNECTIONS=200
-      - POSTGRES_SHARED_BUFFERS=256MB
+      - POSTGRES_MAX_CONNECTIONS=20000
+      - POSTGRES_SHARED_BUFFERS=512MB
     ports:
       - "5437:5432/tcp"
     healthcheck:
@@ -31,7 +31,7 @@ services:
     networks:
       - indexer_network
     <<: *logging
-    command: postgres -c 'max_connections=200'
+    command: postgres -c 'max_connections=20000'
 
   redis:
     container_name: redis
