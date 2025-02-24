@@ -257,15 +257,6 @@ func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 				return nil
 			}
 
-			if len(allBlocks) > 0 {
-				_, exists := allBlocks[currBlock]
-				if exists {
-					config.Log.Infof("===> Block %d already indexed, skipping", currBlock)
-					currBlock++
-					continue
-				}
-			}
-
 			// The job queue is running out of jobs to process, see if the blockchain has produced any new blocks we haven't indexed yet.
 			if len(blockChan) <= cap(blockChan)/4 {
 				// This is the latest block height available on the Node.
@@ -312,6 +303,15 @@ func GenerateDefaultEnqueueFunction(db *gorm.DB, cfg config.IndexConfig, chainID
 						}
 
 						continue
+					}
+
+					if len(allBlocks) > 0 {
+						_, exists := allBlocks[currBlock]
+						if exists {
+							config.Log.Infof("===> Block %d already indexed, skipping", currBlock)
+							currBlock++
+							continue
+						}
 					}
 
 					// Add the new block to the queue
