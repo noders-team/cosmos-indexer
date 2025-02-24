@@ -374,7 +374,7 @@ func runIndexerAsFetcher(ctx context.Context, idxr *Indexer, startBlock, endBloc
 				allBlocks[b.Height] = struct{}{}
 			}
 		}
-		log.Info().Msgf("%d", len(allBlocks))
+		log.Info().Msgf("Already indexed blocks in the interval: %d", len(allBlocks))
 		blockEnqueueFunction, err := core.GenerateDefaultEnqueueFunction(idxr.db, *idxr.cfg, dbChainID,
 			idxr.rpcClient, counter, endBlockInternal, allBlocks)
 		if err != nil {

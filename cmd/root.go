@@ -113,14 +113,18 @@ func connectToDBAndMigrate(dbConfig config.Database) (*gorm.DB, error) {
 	}
 
 	sqldb, _ := database.DB()
-	sqldb.SetMaxIdleConns(1_000_000)
-	sqldb.SetMaxOpenConns(1_000_000)
+	sqldb.SetMaxIdleConns(50)
+	sqldb.SetMaxOpenConns(200)
 	sqldb.SetConnMaxLifetime(time.Hour)
 
-	err = db.MigrateModels(database)
-	if err != nil {
-		log.Err(err).Msg("Error running DB migrations")
-		return nil, err
+	if indexer.cfg.Base.Mode == "fetcher" {
+		log.Info().Msg("Skipping DB migrations for fetcher mode")
+	} else {
+		err = db.MigrateModels(database)
+		if err != nil {
+			log.Err(err).Msg("Error running DB migrations")
+			return nil, err
+		}
 	}
 
 	return database, err
