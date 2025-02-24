@@ -118,7 +118,7 @@ jobs:
                 --log.level=info \
                 --base.start-block=${{ vars.BASE_START_BLOCK }} \
                 --base.end-block=${{ vars.BASE_END_BLOCK || -1 }} \
-                --base.throttling=${{ vars.BASE_THROTTLING || 2.005 }} \
+                --base.throttling=${{ vars.BASE_THROTTLING || 0.1005 }} \
                 --base.rpc-workers=${{ vars.BASE_RPC_WORKERS || 10 }} \
                 --base.index-transactions=${{ vars.BASE_INDEX_TRANSACTIONS || true }} \
                 --base.reindex=${{ vars.BASE_REINDEX || false }} \

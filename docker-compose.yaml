@@ -87,7 +87,7 @@ services:
       --log.level = info \
       --base.start-block 9568000 \
       --base.end-block -1 \
-      --base.throttling 2.005 \
+      --base.throttling 0.1005 \
       --base.rpc-workers 1 \
       --base.index-transactions true \
       --probe.rpc https://nillion-testnet.rpc.kjnodes.com  \
