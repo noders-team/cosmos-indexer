@@ -14,13 +14,20 @@ jobs:
       fail-fast: false
       matrix:
         environment:
+          # mainnet
           - celestia-prod
+          - story-prod
+          - berachain-prod
+          - nillion-prod
+
+          # testnet
           - 0g-testnet-prod
           - nillion-testnet-prod
           - story-testnet-prod
           - babylon-testnet-prod
-          - berachain-prod
-          - nillion-prod
+
+          # dev
+          - celestia-dev
 
     environment: ${{ matrix.environment }}
 

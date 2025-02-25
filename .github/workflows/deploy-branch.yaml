@@ -13,14 +13,20 @@ on:
         default: 'celestia'
         type: choice
         options:
-          - celestia-dev
+          # mainnet
           - celestia-prod
+          - story-prod
+          - berachain-prod
+          - nillion-prod
+
+          # testnet
           - 0g-testnet-prod
           - nillion-testnet-prod
           - story-testnet-prod
           - babylon-testnet-prod
-          - berachain-prod
-          - nillion-prod
+
+          # dev
+          - celestia-dev
 
 jobs:
   build:
