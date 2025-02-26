@@ -47,6 +47,7 @@ type Txs interface {
 	ProposalDepositors(ctx context.Context, proposalID int,
 		sortBy *model.SortBy, limit int64, offset int64) ([]*model.ProposalDeposit, int64, error)
 	TotalRewardByAccount(ctx context.Context, account string) ([]*model.DecCoin, error)
+	GetEvmTransactionsByBlock(ctx context.Context, height int64, limit int64, offset int64) ([]*model.Tx, int64, error)
 }
 
 type txs struct {
@@ -107,6 +108,21 @@ func (s *txs) GetTxByHash(ctx context.Context, txHash string) (*model.Tx, error)
 			continue
 		}
 		tx.Events = events
+
+		isEvm, err := s.txRepo.IsEvmTransaction(ctx, tx.Hash)
+		if err != nil {
+			log.Err(err).Msgf("error checking if tx is EVM: %s", tx.Hash)
+		} else if isEvm {
+			evmDetails, err := s.txRepo.GetEvmTransactionDetails(ctx, tx.Hash)
+			if err != nil {
+				log.Err(err).Msgf("error getting EVM details for tx %s", tx.Hash)
+			} else {
+				if tx.Metadata == nil {
+					tx.Metadata = make(map[string]interface{})
+				}
+				tx.Metadata["evm"] = evmDetails
+			}
+		}
 	}
 	txRes := transactions[0]
 	return txRes, nil
@@ -207,4 +223,8 @@ func (s *txs) ProposalDepositors(ctx context.Context, proposalID int,
 
 func (s *txs) TotalRewardByAccount(ctx context.Context, account string) ([]*model.DecCoin, error) {
 	return s.txRepo.TotalRewardByAccount(ctx, account)
+}
+
+func (s *txs) GetEvmTransactionsByBlock(ctx context.Context, height int64, limit int64, offset int64) ([]*model.Tx, int64, error) {
+	return s.txRepo.GetEvmTransactionsByBlock(ctx, height, limit, offset)
 }

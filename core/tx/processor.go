@@ -1,6 +1,7 @@
 package tx
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"time"
@@ -30,6 +31,7 @@ type Processor interface {
 		txMessageEventLogs []txtypes.LogMessage,
 		uniqueEventTypes map[string]model.MessageEventType,
 		uniqueEventAttributeKeys map[string]model.MessageEventAttributeKey) (string, dbTypes.MessageDBWrapper)
+	ProcessEvmTx(evmTx *clients.EvmTransaction) (dbTypes.TxDBWrapper, error)
 }
 
 type processor struct {
@@ -237,4 +239,81 @@ func (a *processor) ProcessMessage(messageIndex int, message types.Msg,
 		currMessageDBWrapper.MessageEvents = append(currMessageDBWrapper.MessageEvents, currMessageEvent)
 	}
 	return currMessageType.MessageType, currMessageDBWrapper
+}
+
+func (a *processor) ProcessEvmTx(evmTx *clients.EvmTransaction) (dbTypes.TxDBWrapper, error) {
+	txDBWrapper := dbTypes.TxDBWrapper{}
+
+	tx := model.Tx{
+		Hash:      evmTx.Hash,
+		Code:      0,
+		Timestamp: evmTx.Timestamp,
+	}
+
+	if evmTx.Status != 1 {
+		tx.Code = 1
+	}
+
+	messageType := "/ethermint.evm.v1.MsgEthereumTx"
+
+	message := model.Message{
+		MessageType: model.MessageType{
+			MessageType: messageType,
+		},
+	}
+
+	evmTxJSON, err := json.Marshal(evmTx)
+	if err != nil {
+		return txDBWrapper, err
+	}
+	message.RawMessage = evmTxJSON
+
+	events := []model.MessageEvent{}
+
+	if evmTx.Value != "0x0" && evmTx.Value != "" {
+		transferEvent := model.MessageEvent{
+			MessageEventType: model.MessageEventType{
+				MessageEventType: "ethereum_tx",
+			},
+			Attributes: []model.MessageEventAttribute{
+				{
+					Key:   "sender",
+					Value: evmTx.From,
+				},
+				{
+					Key:   "recipient",
+					Value: evmTx.To,
+				},
+				{
+					Key:   "amount",
+					Value: evmTx.Value,
+				},
+			},
+		}
+		events = append(events, transferEvent)
+	}
+
+	messageDBWrapper := dbTypes.MessageDBWrapper{
+		Message: message,
+		Events:  events,
+	}
+
+	txDBWrapper.Tx = tx
+	txDBWrapper.Messages = []dbTypes.MessageDBWrapper{messageDBWrapper}
+
+	uniqueMessageTypes := make(map[string]model.MessageType)
+	uniqueMessageTypes[messageType] = message.MessageType
+	txDBWrapper.UniqueMessageTypes = uniqueMessageTypes
+
+	uniqueEventTypes := make(map[string]model.MessageEventType)
+	uniqueEventTypes["ethereum_tx"] = model.MessageEventType{MessageEventType: "ethereum_tx"}
+	txDBWrapper.UniqueMessageEventTypes = uniqueEventTypes
+
+	uniqueAttributeKeys := make(map[string]model.MessageEventAttributeKey)
+	uniqueAttributeKeys["sender"] = model.MessageEventAttributeKey{Key: "sender"}
+	uniqueAttributeKeys["recipient"] = model.MessageEventAttributeKey{Key: "recipient"}
+	uniqueAttributeKeys["amount"] = model.MessageEventAttributeKey{Key: "amount"}
+	txDBWrapper.UniqueMessageAttributeKeys = uniqueAttributeKeys
+
+	return txDBWrapper, nil
 }

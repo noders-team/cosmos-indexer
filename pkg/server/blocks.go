@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -74,12 +75,27 @@ func (r *blocksServer) TxChartByDay(ctx context.Context, in *pb.TxChartByDayRequ
 }
 
 func (r *blocksServer) TxByHash(ctx context.Context, in *pb.TxByHashRequest) (*pb.TxByHashResponse, error) {
-	res, err := r.srvTx.GetTxByHash(ctx, in.Hash)
+	tx, err := r.srvTx.GetTxByHash(ctx, in.TxHash)
 	if err != nil {
 		return &pb.TxByHashResponse{}, err
 	}
+
+	txProto := r.txToProto(tx)
+
+	if tx.Metadata != nil {
+		if evmDetails, ok := tx.Metadata["evm"].(map[string]interface{}); ok {
+			evmDetailsBytes, err := json.Marshal(evmDetails)
+			if err == nil {
+				if txProto.Metadata == nil {
+					txProto.Metadata = make(map[string]string)
+				}
+				txProto.Metadata["evm_details"] = string(evmDetailsBytes)
+			}
+		}
+	}
+
 	return &pb.TxByHashResponse{
-		Tx: r.txToProto(res),
+		Tx: txProto,
 	}, nil
 }
 
@@ -257,7 +273,7 @@ func (r *blocksServer) TransactionRawLog(ctx context.Context, in *pb.Transaction
 }
 
 func (r *blocksServer) txToProto(tx *model.Tx) *pb.TxByHash {
-	return &pb.TxByHash{
+	result := &pb.TxByHash{
 		Memo:                        tx.Memo,
 		TimeoutHeight:               fmt.Sprintf("%d", tx.TimeoutHeight),
 		ExtensionOptions:            tx.ExtensionOptions,
@@ -292,6 +308,20 @@ func (r *blocksServer) txToProto(tx *model.Tx) *pb.TxByHash {
 		SenderReceiver: r.txSenderToProto(tx.SenderReceiver),
 		Events:         r.toEventsProto(tx.Events),
 	}
+
+	if tx.Metadata != nil {
+		if evmDetails, ok := tx.Metadata["evm"].(map[string]interface{}); ok {
+			evmDetailsBytes, err := json.Marshal(evmDetails)
+			if err == nil {
+				if result.Metadata == nil {
+					result.Metadata = make(map[string]string)
+				}
+				result.Metadata["evm_details"] = string(evmDetailsBytes)
+			}
+		}
+	}
+
+	return result
 }
 
 func (r *blocksServer) toEventsProto(in []*model.TxEvents) []*pb.TxEvent {
@@ -796,4 +826,25 @@ func (r *blocksServer) RewardByAccount(ctx context.Context, in *pb.RewardByAccou
 	}
 
 	return &pb.RewardByAccountResponse{Amount: data}, nil
+}
+
+func (r *blocksServer) EvmTransactionsByBlock(ctx context.Context, in *pb.EvmTransactionsByBlockRequest) (*pb.EvmTransactionsByBlockResponse, error) {
+	transactions, total, err := r.srvTx.GetEvmTransactionsByBlock(ctx, in.BlockHeight, in.Limit.Limit, in.Limit.Offset)
+	if err != nil {
+		return &pb.EvmTransactionsByBlockResponse{}, err
+	}
+
+	txs := make([]*pb.TxByHash, 0, len(transactions))
+	for _, tx := range transactions {
+		txs = append(txs, r.txToProto(tx))
+	}
+
+	return &pb.EvmTransactionsByBlockResponse{
+		Txs: txs,
+		Result: &pb.Result{
+			Limit:  in.Limit.Limit,
+			Offset: in.Limit.Offset,
+			All:    total,
+		},
+	}, nil
 }

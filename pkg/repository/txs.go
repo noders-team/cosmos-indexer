@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"crypto/md5"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -55,12 +56,16 @@ type Txs interface {
 	ProposalDepositors(ctx context.Context, proposalID int,
 		sortBy *model.SortBy, limit int64, offset int64) ([]*model.ProposalDeposit, int64, error)
 	TotalRewardByAccount(ctx context.Context, account string) ([]*model.DecCoin, error)
+	GetEvmTransactionDetails(ctx context.Context, txHash string) (map[string]interface{}, error)
+	IsEvmTransaction(ctx context.Context, txHash string) (bool, error)
+	GetEvmTransactionsByBlock(ctx context.Context, height int64, limit int64, offset int64) ([]*model.Tx, int64, error)
 }
 
 type TxsFilter struct {
 	TxHash        *string
 	TxBlockHeight *int64
 	TxHashes      []string
+	MessageType   []string
 }
 
 type txs struct {
@@ -822,7 +827,7 @@ func (r *txs) getTransactionsByTypes(ctx context.Context, accountAddress string,
 				 left join message_events on messages.id = message_events.message_id
 				 left join message_event_types on message_events.message_event_type_id=message_event_types.id
 				 left join message_event_attributes on message_events.id = message_event_attributes.message_event_id
-				 left join message_event_attribute_keys on message_event_attributes.message_event_attribute_key_id = message_event_attribute_keys.id
+				 left join message_event_attribute_keys on message_events.id = message_event_attributes.message_event_attribute_key_id
 		where message_types.message_type=ANY($4)
 		  and message_event_attributes.value=$1
 		group by txes.id, txes.timestamp, txes.hash, blocks.height
@@ -1425,4 +1430,54 @@ func (r *txs) TotalRewardByAccount(ctx context.Context, account string) ([]*mode
 		data = append(data, &denom)
 	}
 	return data, nil
+}
+
+func (r *txs) GetEvmTransactionDetails(ctx context.Context, txHash string) (map[string]interface{}, error) {
+	query := `
+        SELECT messages.raw_message
+        FROM txes
+        JOIN messages ON txes.id = messages.tx_id
+        JOIN message_types ON messages.message_type_id = message_types.id
+        WHERE txes.hash = $1 AND message_types.message_type = '/ethermint.evm.v1.MsgEthereumTx'
+    `
+
+	var rawMessage []byte
+	err := r.db.QueryRow(ctx, query, txHash).Scan(&rawMessage)
+	if err != nil {
+		return nil, err
+	}
+
+	var evmDetails map[string]interface{}
+	if err := json.Unmarshal(rawMessage, &evmDetails); err != nil {
+		return nil, err
+	}
+
+	return evmDetails, nil
+}
+
+func (r *txs) IsEvmTransaction(ctx context.Context, txHash string) (bool, error) {
+	query := `
+        SELECT COUNT(*)
+        FROM txes
+        JOIN messages ON txes.id = messages.tx_id
+        JOIN message_types ON messages.message_type_id = message_types.id
+        WHERE txes.hash = $1 AND message_types.message_type = '/ethermint.evm.v1.MsgEthereumTx'
+    `
+
+	var count int
+	err := r.db.QueryRow(ctx, query, txHash).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
+func (r *txs) GetEvmTransactionsByBlock(ctx context.Context, height int64, limit int64, offset int64) ([]*model.Tx, int64, error) {
+	filter := &TxsFilter{
+		TxBlockHeight: &height,
+		MessageType:   []string{"/ethermint.evm.v1.MsgEthereumTx"},
+	}
+
+	return r.Transactions(ctx, limit, offset, filter)
 }

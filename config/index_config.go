@@ -41,6 +41,7 @@ type IndexBase struct {
 	TransactionIndexingEnabled bool      `mapstructure:"index-transactions"`
 	ExitWhenCaughtUp           bool      `mapstructure:"exit-when-caught-up"`
 	FilterFile                 string    `mapstructure:"filter-file"`
+	EvmRpcUrl                  string    `mapstructure:"evm-rpc-url"`
 }
 
 // Flags for specific, deeper indexing behavior
@@ -79,6 +80,9 @@ func SetupIndexSpecificFlags(conf *IndexConfig, cmd *cobra.Command) {
 	cmd.PersistentFlags().IntVar(&conf.Base.ModeCoolDownMins, "base.mode-cooldown-mins", 5, "cool down period for mode fetcher")
 	cmd.PersistentFlags().IntVar(&conf.Base.ModeCoolDownCount, "base.mode-cooldown-count", 5000, "cool down count for mode fetcher")
 	cmd.PersistentFlags().StringVar(&conf.ConfigFileLocation, "config-file", "", "config file location")
+
+	// Add EVM RPC URL flag
+	cmd.PersistentFlags().StringVar(&conf.Base.EvmRpcUrl, "base.evm-rpc-url", "", "URL for the EVM RPC endpoint")
 }
 
 func (conf *IndexConfig) Validate() error {

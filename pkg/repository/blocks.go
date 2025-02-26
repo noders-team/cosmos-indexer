@@ -89,6 +89,23 @@ func (r *blocks) GetBlockInfo(ctx context.Context, block int32) (*model.BlockInf
 	}
 	o.TotalTx = allTx
 
+	evmTxQuery := `
+		SELECT COUNT(*)
+		FROM txes
+		JOIN messages ON txes.id = messages.tx_id
+		JOIN message_types ON messages.message_type_id = message_types.id
+		JOIN blocks ON txes.block_id = blocks.id
+		WHERE blocks.height = $1 AND message_types.message_type = '/ethermint.evm.v1.MsgEthereumTx'
+	`
+
+	var evmTxCount int64
+	err = r.db.QueryRow(ctx, evmTxQuery, block).Scan(&evmTxCount)
+	if err != nil {
+		return nil, fmt.Errorf("count EVM txs %v", err)
+	}
+
+	o.EvmTxCount = evmTxCount
+
 	return o, nil
 }
 
