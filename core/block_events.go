@@ -22,12 +22,12 @@ func ProcessRPCBlockResults(conf config.IndexConfig, block models.Block, blockRe
 	blockDBWrapper.UniqueBlockEventTypes = make(map[string]models.BlockEventType)
 
 	var err error
-	blockDBWrapper.BeginBlockEvents, err = ProcessRPCBlockEvents(blockDBWrapper.Block, blockResults.BeginBlockEvents, models.BeginBlockEvent, blockDBWrapper.UniqueBlockEventTypes, blockDBWrapper.UniqueBlockEventAttributeKeys, customBeginBlockParsers, conf)
+	blockDBWrapper.BeginBlockEvents, err = ProcessRPCBlockEvents(blockDBWrapper.Block, blockResults.FinalizeBlockEvents, models.BeginBlockEvent, blockDBWrapper.UniqueBlockEventTypes, blockDBWrapper.UniqueBlockEventAttributeKeys, customBeginBlockParsers, conf)
 	if err != nil {
 		return nil, err
 	}
 
-	blockDBWrapper.EndBlockEvents, err = ProcessRPCBlockEvents(blockDBWrapper.Block, blockResults.EndBlockEvents, models.EndBlockEvent, blockDBWrapper.UniqueBlockEventTypes, blockDBWrapper.UniqueBlockEventAttributeKeys, customEndBlockParsers, conf)
+	blockDBWrapper.EndBlockEvents, err = ProcessRPCBlockEvents(blockDBWrapper.Block, blockResults.FinalizeBlockEvents, models.EndBlockEvent, blockDBWrapper.UniqueBlockEventTypes, blockDBWrapper.UniqueBlockEventAttributeKeys, customEndBlockParsers, conf)
 	if err != nil {
 		return nil, err
 	}

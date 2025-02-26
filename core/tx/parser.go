@@ -3,26 +3,23 @@ package tx
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/noders-team/cosmos-indexer/probe"
 	"reflect"
 	"strings"
 	"time"
 	"unsafe"
 
-	"github.com/noders-team/cosmos-indexer/pkg/model"
-
-	"github.com/rs/zerolog/log"
-
-	"github.com/noders-team/cosmos-indexer/core"
-	"github.com/shopspring/decimal"
-
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/cosmos/cosmos-sdk/types"
 	cosmosTx "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/noders-team/cosmos-indexer/config"
+	"github.com/noders-team/cosmos-indexer/core"
 	txtypes "github.com/noders-team/cosmos-indexer/cosmos/modules/tx"
 	dbTypes "github.com/noders-team/cosmos-indexer/db"
 	"github.com/noders-team/cosmos-indexer/filter"
-	"github.com/nodersteam/probe/client"
+	"github.com/noders-team/cosmos-indexer/pkg/model"
+	"github.com/rs/zerolog/log"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -35,19 +32,19 @@ type Parser interface {
 
 type parser struct {
 	db        *gorm.DB
-	cl        *client.ChainClient
+	cl        *probe.ChainClient
 	processor Processor
 }
 
-func NewParser(db *gorm.DB, cl *client.ChainClient, processor Processor) Parser {
+func NewParser(db *gorm.DB, cl *probe.ChainClient, processor Processor) Parser {
 	return &parser{db: db, cl: cl, processor: processor}
 }
 
 func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageTypeFilter,
 	blockResults *coretypes.ResultBlock, resultBlockRes *coretypes.ResultBlockResults,
 ) ([]dbTypes.TxDBWrapper, *time.Time, error) {
-	if len(blockResults.Block.Txs) != len(resultBlockRes.TxsResults) {
-		config.Log.Fatalf("blockResults & resultBlockRes: different length")
+	if len(blockResults.Block.Txs) != len(resultBlockRes.TxResults) {
+		config.Log.Fatalf("blockResults & resultBlockRes: different length %d != %d", len(blockResults.Block.Txs), len(resultBlockRes.TxResults))
 	}
 
 	blockTime := &blockResults.Block.Time
@@ -55,7 +52,7 @@ func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageT
 	currTxDbWrappers := make([]dbTypes.TxDBWrapper, len(blockResults.Block.Txs))
 
 	for txIdx, tendermintTx := range blockResults.Block.Txs {
-		txResult := resultBlockRes.TxsResults[txIdx]
+		txResult := resultBlockRes.TxResults[txIdx]
 
 		// Indexer types only used by the indexer app (similar to the cosmos types)
 		var indexerMergedTx txtypes.MergedTx
@@ -63,23 +60,31 @@ func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageT
 		var txBody txtypes.Body
 		var currMessages []types.Msg
 		var currLogMsgs []txtypes.LogMessage
+		var err error
 
-		txDecoder := a.cl.Codec.TxConfig.TxDecoder()
-
-		txBasic, err := txDecoder(tendermintTx)
-		var txFull *cosmosTx.Tx
+		txFull, err := core.Decode(a.cl.Codec, []byte(tendermintTx.String()))
 		if err != nil {
-			txBasic, err = core.InAppTxDecoder(a.cl.Codec)(tendermintTx)
-			if err != nil {
-				return nil, blockTime, fmt.Errorf("ProcessRPCBlockByHeightTXs: TX cannot be parsed from block %v. This is usually a proto definition error. Err: %v", blockResults.Block.Height, err)
-			}
-			txFull = txBasic.(*cosmosTx.Tx)
-		} else {
-			// This is a hack, but as far as I can tell necessary. "wrapper" struct is private in Cosmos SDK.
-			field := reflect.ValueOf(txBasic).Elem().FieldByName("tx")
-			iTx := a.getUnexportedField(field)
-			txFull = iTx.(*cosmosTx.Tx)
+			log.Info().Msgf("error decoding transaction from: %s", tendermintTx.String())
+			return nil, nil, err
 		}
+
+		/*
+			txDecoder := a.cl.Codec.TxConfig.TxDecoder()
+
+			txBasic, err := txDecoder(tendermintTx)
+			var txFull cosmosTx.Tx
+			if err != nil {
+				txBasic, err = core.InAppTxDecoder(a.cl.Codec)(tendermintTx)
+				if err != nil {
+					return nil, blockTime, fmt.Errorf("ProcessRPCBlockByHeightTXs: TX cannot be parsed from block %v. This is usually a proto definition error. Err: %v", blockResults.Block.Height, err)
+				}
+				txFull = txBasic
+			} else {
+				// This is a hack, but as far as I can tell necessary. "wrapper" struct is private in Cosmos SDK.
+				field := reflect.ValueOf(txBasic).Elem().FieldByName("tx")
+				iTx := a.getUnexportedField(field)
+				txFull = iTx.(cosmosTx.Tx)
+			}*/
 
 		logs := types.ABCIMessageLogs{}
 		// Failed TXs do not have proper JSON in the .Log field, causing ParseABCILogs to fail to unmarshal the logs
@@ -184,14 +189,16 @@ func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageT
 
 		filteredSigners := []types.AccAddress{}
 		for _, filteredMessage := range txBody.Messages {
-			if filteredMessage != nil {
-				err := filteredMessage.ValidateBasic()
-				if err != nil {
-					config.Log.Error("error validating filtered message, ignoring", err)
-					continue
-				}
-				filteredSigners = append(filteredSigners, filteredMessage.GetSigners()...)
-			}
+			println(filteredMessage) // TODO
+			/*
+				if filteredMessage != nil {
+					err := filteredMessage.ValidateBasic()
+					if err != nil {
+						config.Log.Error("error validating filtered message, ignoring", err)
+						continue
+					}
+					filteredSigners = append(filteredSigners, filteredMessage.GetSigners()...)
+				}*/
 		}
 
 		signers, signerInfos, err := a.processor.ProcessSigners(txFull.AuthInfo, filteredSigners)
@@ -384,11 +391,12 @@ func (a *parser) ProcessRPCTXs(messageTypeFilters []filter.MessageTypeFilter,
 		}
 
 		filteredSigners := make([]types.AccAddress, 0)
+		/* TODO
 		for _, filteredMessage := range txBody.Messages {
 			if filteredMessage != nil {
 				filteredSigners = append(filteredSigners, filteredMessage.GetSigners()...)
 			}
-		}
+		}*/
 
 		err = currTx.AuthInfo.UnpackInterfaces(a.cl.Codec.InterfaceRegistry)
 		if err != nil {

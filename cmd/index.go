@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"encoding/base64"
 	"fmt"
+	"github.com/noders-team/cosmos-indexer/probe"
 	"io"
 	"net"
 	"os"
@@ -31,18 +32,13 @@ import (
 	blocks "github.com/noders-team/cosmos-indexer/proto"
 	"google.golang.org/grpc"
 
-	"github.com/nodersteam/probe/client"
-
 	"github.com/noders-team/cosmos-indexer/config"
 	"github.com/noders-team/cosmos-indexer/core"
 	dbTypes "github.com/noders-team/cosmos-indexer/db"
 	"github.com/noders-team/cosmos-indexer/db/models"
 	"github.com/noders-team/cosmos-indexer/filter"
 	"github.com/noders-team/cosmos-indexer/parsers"
-	"github.com/noders-team/cosmos-indexer/probe"
 	"github.com/spf13/cobra"
-
-	probeClient "github.com/nodersteam/probe/client"
 
 	"gorm.io/gorm"
 )
@@ -54,7 +50,7 @@ const (
 type Indexer struct {
 	cfg                                 *config.IndexConfig
 	db                                  *gorm.DB
-	cl                                  *client.ChainClient
+	cl                                  *probe.ChainClient
 	blockEventFilterRegistries          blockEventFilterRegistries
 	messageTypeFilters                  []filter.MessageTypeFilter
 	customBeginBlockEventParserRegistry map[string][]parsers.BlockEventParser // Used for associating parsers to block event types in BeginBlock events
@@ -799,7 +795,7 @@ func (idxr *Indexer) processBlocks(wg *sync.WaitGroup,
 	blockEventFilterRegistry blockEventFilterRegistries,
 	blocksCh chan *model.BlockInfo,
 	cache *repository.Cache,
-	_ *probeClient.Codec,
+	_ *probe.Codec,
 ) {
 	defer close(blockEventsDataChan)
 	defer close(txDataChan)
