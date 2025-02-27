@@ -116,7 +116,7 @@ func setupIndex(cmd *cobra.Command, args []string) error {
 
 	db, err := connectToDBAndMigrate(indexer.cfg.Database)
 	if err != nil {
-		config.Log.Fatal("Could not establish connection to the database", err)
+		config.Log.Fatal("error migrating DB", err)
 	}
 
 	indexer.db = db
@@ -1146,3 +1146,80 @@ func (idxr *Indexer) saveAggregated(ctx context.Context, txRepo repository.Txs, 
 
 	return nil
 }
+
+/*
+func processBlock(data *core.IndexerBlockEventData) {
+	block, err := core.ProcessBlock(data.BlockData, data.BlockResultsData, chainID)
+	if err != nil {
+		config.Log.Errorf("Error processing block %d: %v", data.Height, err)
+		return
+	}
+
+	if data.GetTxsResponse != nil {
+		// Existing code for processing Cosmos transactions...
+	}
+
+	if data.EvmTransactions != nil && len(data.EvmTransactions) > 0 {
+		txDBWrappers := make([]dbTypes.TxDBWrapper, 0, len(data.EvmTransactions))
+
+		for _, evmTx := range data.EvmTransactions {
+			txDBWrapper, err := txProcessor.ProcessEvmTx(evmTx)
+			if err != nil {
+				log.Err(err).Msgf("Failed to process EVM transaction %s", evmTx.Hash)
+				continue
+			}
+
+			txDBWrapper.Tx.Block = block
+
+			txDBWrappers = append(txDBWrappers, txDBWrapper)
+		}
+
+		if len(txDBWrappers) > 0 {
+			blockData := &dbTypes.BlockData{
+				Block:        block,
+				TxDBWrappers: txDBWrappers,
+			}
+
+			if err := db.SaveBlockData(dbTransaction, blockData); err != nil {
+				log.Err(err).Msgf("Failed to save EVM transactions for block %d", data.Height)
+			}
+
+			for _, txDBWrapper := range txDBWrappers {
+				transaction := txDBWrapper.Tx
+
+				res, err := txRepo.GetSenderAndReceiver(context.Background(), transaction.Hash)
+				if err != nil {
+					log.Err(err).Msgf("unable to find sender and receiver for tx %s", transaction.Hash)
+				} else {
+					transaction.SenderReceiver = res
+				}
+
+				go func(tx model.Tx) {
+					events, err := txRepo.GetEvents(context.Background(), tx.ID)
+					if err != nil {
+						log.Err(err).Msgf("Failed to get events for tx %s", tx.Hash)
+					}
+					errAggr := idxr.saveAggregated(context.Background(), txRepo, &tx, events)
+					if errAggr != nil {
+						log.Err(errAggr).Msgf("Failed to save aggregated for tx %s", tx.Hash)
+					}
+
+					errEvVals := idxr.saveAggregatedEventValues(context.Background(), &tx, events)
+					if errEvVals != nil {
+						log.Err(errEvVals).Msgf("Failed to save saveAggregatedEventValues for tx %s", tx.Hash)
+					}
+
+					errEv := idxr.saveAggregatedEvents(context.Background(), &tx, events)
+					if errEv != nil {
+						log.Err(errEv).Msgf("Failed to save saveAggregatedEvents for tx %s", tx.Hash)
+					}
+				}(transaction)
+
+				txsCh <- &transaction
+				if err := cache.PublishTx(context.Background(), &transaction); err != nil {
+					config.Log.Error(err.Error())
+				}
+			}
+		}
+	}
+}*/

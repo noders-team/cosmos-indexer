@@ -16,6 +16,7 @@ replace (
 	github.com/syndtr/goleveldb => github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 	golang.org/x/exp => golang.org/x/exp v0.0.0-20230711153332-06a737ee72cb
 	nhooyr.io/websocket => github.com/nhooyr/websocket v1.8.7
+
 )
 
 require (
@@ -23,6 +24,7 @@ require (
 	github.com/cometbft/cometbft v1.0.0
 	github.com/cosmos/cosmos-sdk v0.47.14
 	github.com/doug-martin/goqu/v9 v9.19.0
+	github.com/go-resty/resty/v2 v2.16.5
 	github.com/jackc/pgx/v5 v5.3.1
 	github.com/lib/pq v1.10.9
 	github.com/ory/dockertest/v3 v3.10.0

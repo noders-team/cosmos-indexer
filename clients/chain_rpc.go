@@ -2,21 +2,29 @@ package clients
 
 import (
 	"context"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"github.com/noders-team/cosmos-indexer/probe"
 	"github.com/noders-team/cosmos-indexer/probe/query"
 	"math"
+	"strconv"
+	"strings"
 	"time"
 
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	types "github.com/cosmos/cosmos-sdk/types"
 	txTypes "github.com/cosmos/cosmos-sdk/types/tx"
+	"github.com/go-resty/resty/v2"
 	"github.com/noders-team/cosmos-indexer/config"
+	"github.com/noders-team/cosmos-indexer/db"
 	"github.com/noders-team/cosmos-indexer/rpc"
 )
 
 type ChainRPC interface {
 	GetBlock(height int64) (*coretypes.ResultBlock, error)
 	GetTxsByBlockHeight(height int64) (*txTypes.GetTxsEventResponse, error)
+	GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]*db.EvmTransaction, error)
 	IsCatchingUp() (bool, error)
 	GetLatestBlockHeight() (int64, error)
 	GetLatestBlockHeightWithRetry(retryMaxAttempts int64, retryMaxWaitSeconds uint64) (int64, error)
@@ -79,6 +87,116 @@ func (c *chainRPC) GetTxsByBlockHeight(height int64) (*txTypes.GetTxsEventRespon
 		Txs:         txs,
 		TxResponses: txsResponses,
 	}, nil
+}
+
+func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]*db.EvmTransaction, error) {
+	if c.cl.EvmRestURl == "" {
+		return nil, nil
+	}
+
+	evmClient := resty.New()
+
+	blockHex := fmt.Sprintf("0x%x", height)
+	requestBody := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  "eth_getBlockByNumber",
+		"params":  []interface{}{blockHex, true},
+		"id":      1,
+	}
+
+	resp, err := evmClient.R().
+		SetHeader("Content-Type", "application/json").
+		SetBody(requestBody).
+		Post(c.cl.EvmRestURl)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to call EVM RPC: %w", err)
+	}
+
+	var result struct {
+		Result struct {
+			Transactions []map[string]interface{} `json:"transactions"`
+			Hash         string                   `json:"hash"`
+		} `json:"result"`
+	}
+
+	if err := json.Unmarshal(resp.Body(), &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal EVM RPC response: %w", err)
+	}
+
+	blockHash := result.Result.Hash
+
+	evmTxs := make([]*db.EvmTransaction, 0, len(result.Result.Transactions))
+	for _, txData := range result.Result.Transactions {
+		tx := &db.EvmTransaction{
+			Hash:        txData["hash"].(string),
+			From:        txData["from"].(string),
+			BlockNumber: height,
+			BlockHash:   blockHash,
+			Timestamp:   blockTime,
+		}
+
+		if to, ok := txData["to"].(string); ok && to != "" {
+			tx.To = to
+		}
+
+		if value, ok := txData["value"].(string); ok {
+			tx.Value = value
+		}
+
+		if data, ok := txData["input"].(string); ok {
+			dataBytes, _ := hex.DecodeString(strings.TrimPrefix(data, "0x"))
+			tx.Data = dataBytes
+		}
+
+		if gas, ok := txData["gas"].(string); ok {
+			gasInt, _ := strconv.ParseUint(strings.TrimPrefix(gas, "0x"), 16, 64)
+			tx.Gas = gasInt
+		}
+
+		if gasPrice, ok := txData["gasPrice"].(string); ok {
+			tx.GasPrice = gasPrice
+		}
+
+		if nonce, ok := txData["nonce"].(string); ok {
+			nonceInt, _ := strconv.ParseUint(strings.TrimPrefix(nonce, "0x"), 16, 64)
+			tx.Nonce = nonceInt
+		}
+
+		if txIndex, ok := txData["transactionIndex"].(string); ok {
+			txIndexInt, _ := strconv.ParseUint(strings.TrimPrefix(txIndex, "0x"), 16, 32)
+			tx.TxIndex = uint(txIndexInt)
+		}
+
+		receiptRequestBody := map[string]interface{}{
+			"jsonrpc": "2.0",
+			"method":  "eth_getTransactionReceipt",
+			"params":  []interface{}{tx.Hash},
+			"id":      1,
+		}
+
+		receiptResp, err := evmClient.R().
+			SetHeader("Content-Type", "application/json").
+			SetBody(receiptRequestBody).
+			Post(c.cl.EvmRestURl)
+
+		if err == nil {
+			var receiptResult struct {
+				Result struct {
+					Status string `json:"status"`
+				} `json:"result"`
+			}
+
+			if err := json.Unmarshal(receiptResp.Body(), &receiptResult); err == nil {
+				statusInt, _ := strconv.ParseUint(strings.TrimPrefix(receiptResult.Result.Status, "0x"), 16, 64)
+				tx.Status = statusInt
+			}
+		}
+
+		evmTxs = append(evmTxs, tx)
+	}
+
+	return evmTxs, nil
 }
 
 func (c *chainRPC) IsCatchingUp() (bool, error) {

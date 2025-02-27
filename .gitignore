@@ -16,3 +16,6 @@ tax-db-pwd.txt
 log.txt
 postgres-data
 mongodb-data
+.cursorrules
+.cursor
+RULESFORAI.md

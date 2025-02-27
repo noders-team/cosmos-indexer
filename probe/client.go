@@ -22,6 +22,7 @@ type ChainClient struct {
 	Output         io.Writer
 	Codec          Codec
 	Logger         log.Logger
+	EvmRestURl     string
 }
 
 func (cc *ChainClient) Invoke(ctx context.Context, method string, args, reply interface{}, opts ...grpc.CallOption) error {

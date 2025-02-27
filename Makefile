@@ -32,7 +32,16 @@ up:
 	docker-compose up --build
 
 up-dev:
-	docker-compose -f docker-compose-dev.yml up -d
+	docker network inspect indexer_network >/dev/null 2>&1 || sudo docker network create indexer_network
+	docker compose -f docker-compose-dev.yml up -d --build
+
+reload-dev:
+	docker compose -f docker-compose-dev.yml up -d --build --force-recreate
+
+refresh-dev:
+	docker compose -f docker-compose-dev.yml down -v
+	rm -rf mongodb-data && rm -rf postgres-data
+	docker compose -f docker-compose-dev.yml up -d --build
 
 clean:
 	rm -rf build

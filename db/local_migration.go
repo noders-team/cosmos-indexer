@@ -6,7 +6,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/noders-team/cosmos-indexer/config"
 	"github.com/noders-team/cosmos-indexer/pkg/repository"
 	"github.com/rs/zerolog/log"
 	migrate "github.com/xakep666/mongo-migrate"
@@ -37,7 +36,7 @@ func (j *localMigrator) Migrate(ctx context.Context) (*mongo.Database, error) {
 		Version:     1,
 		Description: "add unique index idx_txhash_type",
 		Up: func(ctx context.Context, db *mongo.Database) error {
-			config.Log.Info("starting v1 migration")
+			log.Info().Msgf("starting v1 migration")
 
 			err := db.Collection("search").Drop(ctx)
 			if err != nil {
@@ -53,6 +52,7 @@ func (j *localMigrator) Migrate(ctx context.Context) (*mongo.Database, error) {
 				return err
 			}
 
+			log.Info().Msgf("v1 migration completed")
 			return nil
 		},
 		Down: func(ctx context.Context, db *mongo.Database) error {
@@ -67,7 +67,7 @@ func (j *localMigrator) Migrate(ctx context.Context) (*mongo.Database, error) {
 		Version:     2,
 		Description: "migrate existing hashes",
 		Up: func(ctx context.Context, db *mongo.Database) error {
-			config.Log.Info("starting txs v2 migration")
+			log.Info().Msgf("starting txs v2 migration")
 			rows, err := j.pg.Query(ctx, `select distinct hash from txes`)
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return err
@@ -82,7 +82,7 @@ func (j *localMigrator) Migrate(ctx context.Context) (*mongo.Database, error) {
 				}
 			}
 
-			config.Log.Info("starting blocks migration")
+			log.Info().Msgf("v2 blocks migration")
 			rows, err = j.pg.Query(ctx, `select distinct block_hash from blocks`)
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return err
@@ -97,6 +97,7 @@ func (j *localMigrator) Migrate(ctx context.Context) (*mongo.Database, error) {
 				}
 			}
 
+			log.Info().Msgf("v2 migration completed")
 			return nil
 		},
 		Down: func(ctx context.Context, db *mongo.Database) error {
@@ -107,7 +108,7 @@ func (j *localMigrator) Migrate(ctx context.Context) (*mongo.Database, error) {
 		Version:     3,
 		Description: "migrate existing hashes with block height",
 		Up: func(ctx context.Context, db *mongo.Database) error {
-			config.Log.Info("starting txs v3 migration")
+			log.Info().Msgf("starting txs v3 migration")
 			err := db.Collection("search").Drop(ctx)
 			if err != nil {
 				log.Err(err).Msgf("Failed to drop index, continue")
@@ -127,7 +128,7 @@ func (j *localMigrator) Migrate(ctx context.Context) (*mongo.Database, error) {
 				}
 			}
 
-			config.Log.Info("starting blocks migration")
+			log.Info().Msgf("starting blocks migration")
 			rows, err = j.pg.Query(ctx, `select distinct block_hash,height from blocks`)
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return err
@@ -143,6 +144,7 @@ func (j *localMigrator) Migrate(ctx context.Context) (*mongo.Database, error) {
 				}
 			}
 
+			log.Info().Msgf("v3 migration completed")
 			return nil
 		},
 		Down: func(ctx context.Context, db *mongo.Database) error {
@@ -153,13 +155,21 @@ func (j *localMigrator) Migrate(ctx context.Context) (*mongo.Database, error) {
 		Version:     4,
 		Description: "migrate tx_events to tx_events_vals_aggregated",
 		Up: func(ctx context.Context, db *mongo.Database) error {
+			log.Info().Msgf("v4 starting tx_events_vals_migration")
 			return j.txEventsValsMigration(ctx)
+		},
+		Down: func(ctx context.Context, db *mongo.Database) error {
+			return nil
 		},
 	}, migrate.Migration{
 		Version:     5,
 		Description: "migrate tx_events to tx_events_aggregated",
 		Up: func(ctx context.Context, db *mongo.Database) error {
+			log.Info().Msgf("v5 starting tx_events_migration")
 			return j.txEventsMigration(ctx)
+		},
+		Down: func(ctx context.Context, db *mongo.Database) error {
+			return nil
 		},
 	})
 	if err := m.Up(ctx, migrate.AllAvailable); err != nil {
