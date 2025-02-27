@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/noders-team/cosmos-indexer/probe"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/noders-team/cosmos-indexer/probe"
 
 	cmjson "github.com/cometbft/cometbft/libs/json"
 
@@ -235,6 +236,14 @@ func (w *blockRPCWorker) FetchBlock(block *EnqueueData) *IndexerBlockEventData {
 		}
 	}
 
+	if block.IndexEVMTransactions {
+		err = w.proceedEvmTx(context.Background(), &currentHeightIndexerData, block.Height)
+		if err != nil {
+			log.Error().Msgf("Error getting txs for block %v from RPC. Err: %v", block.Height, err)
+			return nil
+		}
+	}
+
 	return &currentHeightIndexerData
 }
 
@@ -286,8 +295,7 @@ func (w *blockRPCWorker) proceedEvmTx(ctx context.Context, currentHeightIndexerD
 		return err
 	}
 	log.Debug().Msgf("EVM txs for block %d: %d", blockHeight, len(txsEventResp))
-	// TODO
-	//currentHeightIndexerData.GetTxsResponse = txsEventResp
+	currentHeightIndexerData.EvmTransactions = txsEventResp
 
 	return nil
 }

@@ -1,6 +1,7 @@
 package tx
 
 import (
+	"cosmossdk.io/math"
 	"encoding/hex"
 	"fmt"
 	"github.com/noders-team/cosmos-indexer/probe"
@@ -25,9 +26,10 @@ import (
 
 type Parser interface {
 	ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageTypeFilter,
-		blockResults *coretypes.ResultBlock, resultBlockRes *coretypes.ResultBlockResults) ([]dbTypes.TxDBWrapper, *time.Time, error)
+		blockResults *coretypes.ResultBlock, resultBlockRes *coretypes.ResultBlockResults) ([]dbTypes.TxDBWrapper, error)
 	ProcessRPCTXs(messageTypeFilters []filter.MessageTypeFilter,
-		txEventResp *cosmosTx.GetTxsEventResponse) ([]dbTypes.TxDBWrapper, *time.Time, error)
+		txEventResp *cosmosTx.GetTxsEventResponse) ([]dbTypes.TxDBWrapper, error)
+	ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDBWrapper, error)
 }
 
 type parser struct {
@@ -42,7 +44,7 @@ func NewParser(db *gorm.DB, cl *probe.ChainClient, processor Processor) Parser {
 
 func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageTypeFilter,
 	blockResults *coretypes.ResultBlock, resultBlockRes *coretypes.ResultBlockResults,
-) ([]dbTypes.TxDBWrapper, *time.Time, error) {
+) ([]dbTypes.TxDBWrapper, error) {
 	if len(blockResults.Block.Txs) != len(resultBlockRes.TxResults) {
 		config.Log.Fatalf("blockResults & resultBlockRes: different length %d != %d", len(blockResults.Block.Txs), len(resultBlockRes.TxResults))
 	}
@@ -65,26 +67,25 @@ func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageT
 		txFull, err := core.Decode(a.cl.Codec, []byte(tendermintTx.String()))
 		if err != nil {
 			log.Info().Msgf("error decoding transaction from: %s", tendermintTx.String())
-			return nil, nil, err
+			return nil, err
 		}
 
-		/*
-			txDecoder := a.cl.Codec.TxConfig.TxDecoder()
+		/*txDecoder := a.cl.Codec.TxConfig.TxDecoder()
 
-			txBasic, err := txDecoder(tendermintTx)
-			var txFull cosmosTx.Tx
+		txBasic, err := txDecoder(tendermintTx)
+		var txFull cosmosTx.Tx
+		if err != nil {
+			txBasic, err = core.InAppTxDecoder(a.cl.Codec)(tendermintTx)
 			if err != nil {
-				txBasic, err = core.InAppTxDecoder(a.cl.Codec)(tendermintTx)
-				if err != nil {
-					return nil, blockTime, fmt.Errorf("ProcessRPCBlockByHeightTXs: TX cannot be parsed from block %v. This is usually a proto definition error. Err: %v", blockResults.Block.Height, err)
-				}
-				txFull = txBasic
-			} else {
-				// This is a hack, but as far as I can tell necessary. "wrapper" struct is private in Cosmos SDK.
-				field := reflect.ValueOf(txBasic).Elem().FieldByName("tx")
-				iTx := a.getUnexportedField(field)
-				txFull = iTx.(cosmosTx.Tx)
-			}*/
+				return nil, blockTime, fmt.Errorf("ProcessRPCBlockByHeightTXs: TX cannot be parsed from block %v. This is usually a proto definition error. Err: %v", blockResults.Block.Height, err)
+			}
+			txFull = txBasic
+		} else {
+			// This is a hack, but as far as I can tell necessary. "wrapper" struct is private in Cosmos SDK.
+			field := reflect.ValueOf(txBasic).Elem().FieldByName("tx")
+			iTx := a.getUnexportedField(field)
+			txFull = iTx.(cosmosTx.Tx)
+		}*/
 
 		logs := types.ABCIMessageLogs{}
 		// Failed TXs do not have proper JSON in the .Log field, causing ParseABCILogs to fail to unmarshal the logs
@@ -122,7 +123,7 @@ func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageT
 			shouldIndex, err := a.messageTypeShouldIndex(txFull.Body.Messages[msgIdx].TypeUrl, messageTypeFilters)
 			if err != nil {
 				config.Log.Error("messageTypeShouldIndex", err)
-				return nil, blockTime, err
+				return nil, err
 			}
 
 			if !shouldIndex {
@@ -184,27 +185,26 @@ func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageT
 		processedTx, _, err := a.processor.ProcessTx(indexerMergedTx, messagesRaw)
 		if err != nil {
 			config.Log.Error("ProcessTx", err)
-			return currTxDbWrappers, blockTime, err
+			return currTxDbWrappers, err
 		}
 
 		filteredSigners := []types.AccAddress{}
+		/* TODO, not in new cosmos SDK
 		for _, filteredMessage := range txBody.Messages {
-			println(filteredMessage) // TODO
-			/*
-				if filteredMessage != nil {
-					err := filteredMessage.ValidateBasic()
-					if err != nil {
-						config.Log.Error("error validating filtered message, ignoring", err)
-						continue
-					}
-					filteredSigners = append(filteredSigners, filteredMessage.GetSigners()...)
-				}*/
-		}
+			if filteredMessage != nil {
+				err := filteredMessage.ValidateBasic()
+				if err != nil {
+					config.Log.Error("error validating filtered message, ignoring", err)
+					continue
+				}
+				filteredSigners = append(filteredSigners, filteredMessage.GetSigners()...)
+			}
+		}*/
 
 		signers, signerInfos, err := a.processor.ProcessSigners(txFull.AuthInfo, filteredSigners)
 		if err != nil {
 			config.Log.Error("ProcessSigners", err)
-			return currTxDbWrappers, blockTime, err
+			return currTxDbWrappers, err
 		}
 
 		processedTx.Tx.SignerAddresses = signers
@@ -212,7 +212,7 @@ func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageT
 		fees, err := a.processor.ProcessFees(indexerTx.AuthInfo, signers)
 		if err != nil {
 			config.Log.Error("ProcessFees", err)
-			return currTxDbWrappers, blockTime, err
+			return currTxDbWrappers, err
 		}
 
 		processedTx.Tx.Fees = fees
@@ -275,15 +275,14 @@ func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageT
 		currTxDbWrappers[txIdx] = processedTx
 	}
 
-	return currTxDbWrappers, blockTime, nil
+	return currTxDbWrappers, nil
 }
 
 // ProcessRPCTXs - Given an RPC response, build out the more specific data used by the parser.
 func (a *parser) ProcessRPCTXs(messageTypeFilters []filter.MessageTypeFilter,
 	txEventResp *cosmosTx.GetTxsEventResponse,
-) ([]dbTypes.TxDBWrapper, *time.Time, error) {
+) ([]dbTypes.TxDBWrapper, error) {
 	currTxDbWrappers := make([]dbTypes.TxDBWrapper, len(txEventResp.Txs))
-	var blockTime *time.Time
 
 	for txIdx := range txEventResp.Txs {
 		// Indexer types only used by the indexer app (similar to the cosmos types)
@@ -302,7 +301,7 @@ func (a *parser) ProcessRPCTXs(messageTypeFilters []filter.MessageTypeFilter,
 
 			shouldIndex, err := a.messageTypeShouldIndex(currTx.Body.Messages[msgIdx].TypeUrl, messageTypeFilters)
 			if err != nil {
-				return nil, blockTime, err
+				return nil, err
 			}
 
 			if !shouldIndex {
@@ -381,37 +380,33 @@ func (a *parser) ProcessRPCTXs(messageTypeFilters []filter.MessageTypeFilter,
 		indexerMergedTx.Tx = indexerTx
 		indexerMergedTx.Tx.AuthInfo = *currTx.AuthInfo
 
-		processedTx, txTime, err := a.processor.ProcessTx(indexerMergedTx, messagesRaw)
+		processedTx, _, err := a.processor.ProcessTx(indexerMergedTx, messagesRaw)
 		if err != nil {
-			return currTxDbWrappers, blockTime, err
-		}
-
-		if blockTime == nil {
-			blockTime = &txTime
+			return currTxDbWrappers, err
 		}
 
 		filteredSigners := make([]types.AccAddress, 0)
-		/* TODO
-		for _, filteredMessage := range txBody.Messages {
-			if filteredMessage != nil {
-				filteredSigners = append(filteredSigners, filteredMessage.GetSigners()...)
-			}
-		}*/
+		/*
+			for _, filteredMessage := range txBody.Messages {
+				if filteredMessage != nil {
+					filteredSigners = append(filteredSigners, filteredMessage.GetSigners()...)
+				}
+			}*/
 
 		err = currTx.AuthInfo.UnpackInterfaces(a.cl.Codec.InterfaceRegistry)
 		if err != nil {
-			return currTxDbWrappers, blockTime, err
+			return currTxDbWrappers, err
 		}
 
 		signers, signerInfos, err := a.processor.ProcessSigners(currTx.AuthInfo, filteredSigners)
 		if err != nil {
-			return currTxDbWrappers, blockTime, err
+			return currTxDbWrappers, err
 		}
 		processedTx.Tx.SignerAddresses = signers
 
 		fees, err := a.processor.ProcessFees(indexerTx.AuthInfo, signers)
 		if err != nil {
-			return currTxDbWrappers, blockTime, err
+			return currTxDbWrappers, err
 		}
 
 		processedTx.Tx.Fees = fees
@@ -472,7 +467,7 @@ func (a *parser) ProcessRPCTXs(messageTypeFilters []filter.MessageTypeFilter,
 		currTxDbWrappers[txIdx] = processedTx
 	}
 
-	return currTxDbWrappers, blockTime, nil
+	return currTxDbWrappers, nil
 }
 
 func (a *parser) messageTypeShouldIndex(messageType string, filters []filter.MessageTypeFilter) (bool, error) {
@@ -544,4 +539,123 @@ func ChainSpecificMessageTypeHandlerBootstrap(chainID string) {
 			messageTypeHandler[key] = value
 		}
 	}
+}
+
+func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDBWrapper, error) {
+	if len(data.EvmTransactions) == 0 {
+		return nil, nil
+	}
+	currTxDbWrappers := make([]dbTypes.TxDBWrapper, len(data.EvmTransactions))
+
+	for txIdx := range data.EvmTransactions {
+		var indexerMergedTx txtypes.MergedTx
+		var indexerTx txtypes.IndexerTx
+		var txBody txtypes.Body
+		var currLogMsgs []txtypes.LogMessage
+		var messagesRaw [][]byte
+
+		txBody.Messages = make([]types.Msg, 0)
+		indexerTx.Body = txBody
+
+		currTxResp := data.EvmTransactions[txIdx]
+		indexerTxResp := txtypes.Response{
+			TxHash:    currTxResp.Hash,
+			Height:    fmt.Sprintf("%d", currTxResp.BlockNumber),
+			TimeStamp: currTxResp.Timestamp.String(),
+			RawLog:    currTxResp.Data,
+			Log:       currLogMsgs,
+			Code:      1,
+			GasUsed:   int64(currTxResp.Gas),
+			GasWanted: int64(currTxResp.Gas),
+			Info:      "",
+			Data:      string(currTxResp.Data),
+		}
+
+		authInfo := cosmosTx.AuthInfo{
+			Fee: &cosmosTx.Fee{
+				Amount: []types.Coin{
+					{
+						Denom:  "eth", // TODO
+						Amount: math.NewInt(int64(currTxResp.Gas)),
+					},
+				},
+				GasLimit: currTxResp.Gas, // TODO
+			},
+			SignerInfos: make([]*cosmosTx.SignerInfo, 0),
+		}
+
+		indexerTx.AuthInfo = authInfo
+		indexerMergedTx.TxResponse = indexerTxResp
+		indexerMergedTx.Tx = indexerTx
+		indexerMergedTx.Tx.AuthInfo = authInfo
+
+		processedTx, _, err := a.processor.ProcessTx(indexerMergedTx, messagesRaw)
+		if err != nil {
+			return currTxDbWrappers, err
+		}
+
+		filteredSigners := make([]types.AccAddress, 0)
+
+		signers, signerInfos, err := a.processor.ProcessSigners(&authInfo, filteredSigners)
+		if err != nil {
+			return currTxDbWrappers, err
+		}
+		processedTx.Tx.SignerAddresses = signers
+
+		fees, err := a.processor.ProcessFees(indexerTx.AuthInfo, signers)
+		if err != nil {
+			return currTxDbWrappers, err
+		}
+
+		processedTx.Tx.Fees = fees
+
+		// extra fields
+		//processedTx.Tx.Signatures = []byte("")
+		processedTx.Tx.Memo = ""
+		processedTx.Tx.TimeoutHeight = 0
+
+		extensionOptions := make([]string, 0)
+		processedTx.Tx.ExtensionOptions = extensionOptions
+
+		nonExtensionOptions := make([]string, 0)
+		processedTx.Tx.NonCriticalExtensionOptions = nonExtensionOptions
+		processedTx.Tx.TxResponse = model.TxResponse{
+			TxHash:    indexerTxResp.TxHash,
+			Height:    indexerTxResp.Height,
+			TimeStamp: indexerTxResp.TimeStamp,
+			Code:      indexerTxResp.Code,
+			RawLog:    indexerTxResp.RawLog,
+			GasUsed:   indexerTxResp.GasUsed,
+			GasWanted: indexerTxResp.GasWanted,
+			Codespace: indexerTxResp.Codespace,
+		}
+
+		txAuthInfo := model.AuthInfo{
+			Fee: model.AuthInfoFee{
+				Granter:  authInfo.Fee.Granter,
+				Payer:    authInfo.Fee.Payer,
+				GasLimit: authInfo.Fee.GasLimit,
+			},
+			SignerInfos: signerInfos,
+		}
+		if authInfo.Tip != nil {
+			tipAmount := make([]model.TipAmount, 0)
+			for _, a := range authInfo.Tip.Amount {
+				tipAmount = append(tipAmount, model.TipAmount{
+					Denom:  a.Denom,
+					Amount: decimal.NewFromInt(a.Amount.Int64()),
+				})
+			}
+			txAuthInfo.Tip = model.Tip{
+				Tipper: authInfo.Tip.Tipper,
+				Amount: tipAmount,
+			}
+		}
+
+		processedTx.Tx.AuthInfo = txAuthInfo
+
+		currTxDbWrappers[txIdx] = processedTx
+	}
+
+	return currTxDbWrappers, nil
 }
