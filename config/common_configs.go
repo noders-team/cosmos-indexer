@@ -31,6 +31,7 @@ type Probe struct {
 	AccountPrefix string `mapstructure:"account-prefix"`
 	ChainID       string `mapstructure:"chain-id"`
 	ChainName     string `mapstructure:"chain-name"`
+	EvmRPCURl     string `mapstructure:"evm-rpc-url"`
 }
 
 type Server struct {
@@ -75,7 +76,8 @@ func SetupProbeFlags(probeConf *Probe, cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&probeConf.RPC, "probe.rpc", "", "node rpc endpoint")
 	cmd.PersistentFlags().StringVar(&probeConf.AccountPrefix, "probe.account-prefix", "", "probe account prefix")
 	cmd.PersistentFlags().StringVar(&probeConf.ChainID, "probe.chain-id", "", "probe chain ID")
-	cmd.PersistentFlags().StringVar(&probeConf.ChainName, "probe.chain-name", "", "probe chain name")
+	cmd.PersistentFlags().StringVar(&probeConf.ChainName, "probe.chain-name", "", "probe chain Name")
+	cmd.PersistentFlags().StringVar(&probeConf.EvmRPCURl, "probe.evm-rpc-url", "", "probe evm rpc url")
 }
 
 func SetupServerFlags(serverConf *Server, cmd *cobra.Command) {

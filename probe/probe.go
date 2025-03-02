@@ -13,6 +13,7 @@ func GetProbeClient(conf config.Probe) *ChainClient {
 	if err != nil {
 		config.Log.Fatalf("Error connecting to chain. Err: %v", err)
 	}
+	cl.EvmRestURl = conf.EvmRPCURl
 	return cl
 }
 
@@ -37,5 +38,6 @@ func GetProbeConfig(conf config.Probe, debug bool) *ChainClientConfig {
 		Timeout:        "30s",
 		OutputFormat:   "json",
 		Modules:        DefaultModuleBasics,
+		EvmRestURl:     conf.EvmRPCURl,
 	}
 }

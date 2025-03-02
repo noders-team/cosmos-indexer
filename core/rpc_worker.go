@@ -229,6 +229,7 @@ func (w *blockRPCWorker) FetchBlock(block *EnqueueData) *IndexerBlockEventData {
 
 	currentHeightIndexerData.BlockData = blockData
 	if block.IndexTransactions {
+		config.Log.Info("Indexing Cosmos transactions")
 		err = w.proceedCosmosTx(context.Background(), &currentHeightIndexerData, block.Height)
 		if err != nil {
 			log.Error().Msgf("Error getting txs for block %v from RPC. Err: %v", block.Height, err)
@@ -237,6 +238,7 @@ func (w *blockRPCWorker) FetchBlock(block *EnqueueData) *IndexerBlockEventData {
 	}
 
 	if block.IndexEVMTransactions {
+		config.Log.Info("Indexing EVM transactions")
 		err = w.proceedEvmTx(context.Background(), &currentHeightIndexerData, block.Height)
 		if err != nil {
 			log.Error().Msgf("Error getting txs for block %v from RPC. Err: %v", block.Height, err)

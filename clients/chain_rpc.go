@@ -4,13 +4,15 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/noders-team/cosmos-indexer/probe"
-	"github.com/noders-team/cosmos-indexer/probe/query"
 	"math"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/noders-team/cosmos-indexer/probe"
+	"github.com/noders-team/cosmos-indexer/probe/query"
 
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	types "github.com/cosmos/cosmos-sdk/types"
@@ -89,9 +91,24 @@ func (c *chainRPC) GetTxsByBlockHeight(height int64) (*txTypes.GetTxsEventRespon
 	}, nil
 }
 
+// GetEvmTxsByBlockHeight retrieves EVM transactions for a specific block height from the Berachain EVM RPC endpoint.
+// This function requires a properly configured EVM RPC endpoint (cl.EvmRestURl) that supports the Ethereum JSON-RPC API.
+// For Berachain, use a reliable RPC endpoint like "https://berachain-testnet-rpc.publicnode.com".
+//
+// The function performs two RPC calls:
+// 1. eth_getBlockByNumber - To get all transactions in the block
+// 2. eth_getTransactionReceipt - For each transaction to get its status
+//
+// Parameters:
+//   - height: The block height to retrieve transactions for
+//   - blockTime: The timestamp of the block (used for the transaction timestamp)
+//
+// Returns:
+//   - []*db.EvmTransaction: Array of EVM transactions found in the block
+//   - error: Any error encountered during the RPC calls or processing
 func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]*db.EvmTransaction, error) {
 	if c.cl.EvmRestURl == "" {
-		return nil, nil
+		return nil, errors.New("EVM URL is not set")
 	}
 
 	evmClient := resty.New()
@@ -122,6 +139,12 @@ func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]
 
 	if err := json.Unmarshal(resp.Body(), &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal EVM RPC response: %w", err)
+	}
+
+	// If result.Result is nil, it means the block doesn't exist in the EVM layer
+	if result.Result.Hash == "" {
+
+		return []*db.EvmTransaction{}, nil
 	}
 
 	blockHash := result.Result.Hash

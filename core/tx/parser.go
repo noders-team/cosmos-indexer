@@ -1,14 +1,15 @@
 package tx
 
 import (
-	"cosmossdk.io/math"
 	"encoding/hex"
 	"fmt"
-	"github.com/noders-team/cosmos-indexer/probe"
 	"reflect"
 	"strings"
 	"time"
 	"unsafe"
+
+	"cosmossdk.io/math"
+	"github.com/noders-team/cosmos-indexer/probe"
 
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/cosmos/cosmos-sdk/types"
@@ -579,7 +580,8 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 						Amount: math.NewInt(int64(currTxResp.Gas)),
 					},
 				},
-				GasLimit: currTxResp.Gas, // TODO
+				GasLimit: currTxResp.Gas,                               // TODO
+				Payer:    "0x0000000000000000000000000000000000000000", // TODO
 			},
 			SignerInfos: make([]*cosmosTx.SignerInfo, 0),
 		}

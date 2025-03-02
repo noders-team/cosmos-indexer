@@ -35,4 +35,5 @@ type ChainClientConfig struct {
 	Timeout        string             `json:"timeout" yaml:"timeout"`
 	OutputFormat   string             `json:"output-format" yaml:"output-format"`
 	Modules        []module.AppModule `json:"-" yaml:"-"`
+	EvmRestURl     string             `json:"-" yaml:"-"`
 }

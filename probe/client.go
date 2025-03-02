@@ -2,15 +2,16 @@ package probe
 
 import (
 	"context"
+	"io"
+	"path"
+	"time"
+
 	"github.com/cometbft/cometbft/libs/log"
 	rpcclient "github.com/cometbft/cometbft/rpc/client"
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	libclient "github.com/cometbft/cometbft/rpc/jsonrpc/client"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	grpc "google.golang.org/grpc"
-	"io"
-	"path"
-	"time"
 )
 
 type ChainClient struct {
@@ -46,6 +47,7 @@ func NewChainClient(ccc *ChainClientConfig, homepath string, input io.Reader, ou
 		Output:         output,
 		Codec:          MakeCodec(ccc.Modules),
 		Logger:         log.NewTMLogger(log.NewSyncWriter(output)),
+		EvmRestURl:     ccc.EvmRestURl,
 	}
 	if err := cc.Init(); err != nil {
 		return nil, err

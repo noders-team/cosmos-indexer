@@ -5,13 +5,14 @@ import (
 	"crypto/md5"
 	"encoding/base64"
 	"fmt"
-	"github.com/noders-team/cosmos-indexer/probe"
 	"io"
 	"net"
 	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/noders-team/cosmos-indexer/probe"
 
 	"gorm.io/gorm/clause"
 
@@ -859,7 +860,7 @@ func (idxr *Indexer) processBlocks(wg *sync.WaitGroup,
 			var txDBWrappers []dbTypes.TxDBWrapper
 			var err error
 
-			if blockData.EvmTransactions != nil && len(blockData.EvmTransactions) > 0 {
+			if idxr.cfg.Base.TransactionEVMIndexingEnabled {
 				txDBWrappers, err = idxr.txParser.ProcessEvmTxs(&blockData)
 			} else {
 				if blockData.GetTxsResponse != nil && len(blockData.GetTxsResponse.Txs) > 0 {

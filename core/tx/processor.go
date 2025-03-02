@@ -3,13 +3,15 @@ package tx
 import (
 	"encoding/json"
 	"fmt"
-	cryptoTypes "github.com/cosmos/cosmos-sdk/crypto/types"
-	"github.com/noders-team/cosmos-indexer/probe"
 	"math/big"
 	"time"
 
+	cryptoTypes "github.com/cosmos/cosmos-sdk/crypto/types"
+	"github.com/noders-team/cosmos-indexer/probe"
+
 	"github.com/noders-team/cosmos-indexer/pkg/model"
 
+	"github.com/araddon/dateparse"
 	"github.com/cosmos/cosmos-sdk/types"
 	cosmosTx "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/noders-team/cosmos-indexer/config"
@@ -42,7 +44,7 @@ func NewProcessor(cl *probe.ChainClient) Processor {
 }
 
 func (a *processor) ProcessTx(tx txtypes.MergedTx, messagesRaw [][]byte) (txDBWapper dbTypes.TxDBWrapper, txTime time.Time, err error) {
-	txTime, err = time.Parse(time.RFC3339, tx.TxResponse.TimeStamp)
+	txTime, err = dateparse.ParseAny(tx.TxResponse.TimeStamp)
 	if err != nil {
 		config.Log.Error("Error parsing tx timestamp.", err)
 		return txDBWapper, txTime, err
@@ -177,6 +179,7 @@ func (a *processor) ProcessSigners(authInfo *cosmosTx.AuthInfo,
 func (a *processor) ProcessFees(authInfo cosmosTx.AuthInfo, signers []models.Address) ([]model.Fee, error) {
 	// TODO not the best way
 	if authInfo.Fee == nil {
+		log.Info().Msgf("ProcessFees: authInfo.Fee is nil")
 		fees := make([]model.Fee, 0)
 		return fees, nil
 	}

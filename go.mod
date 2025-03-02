@@ -16,11 +16,12 @@ replace (
 	github.com/syndtr/goleveldb => github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 	golang.org/x/exp => golang.org/x/exp v0.0.0-20230711153332-06a737ee72cb
 	nhooyr.io/websocket => github.com/nhooyr/websocket v1.8.7
-
 )
 
 require (
 	cosmossdk.io/core v1.0.0-alpha.6
+	cosmossdk.io/math v1.4.0
+	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de
 	github.com/cometbft/cometbft v1.0.0
 	github.com/cosmos/cosmos-sdk v0.47.14
 	github.com/doug-martin/goqu/v9 v9.19.0
@@ -54,7 +55,6 @@ require (
 	cosmossdk.io/depinject v1.1.0 // indirect
 	cosmossdk.io/errors v1.0.1 // indirect
 	cosmossdk.io/log v1.5.0 // indirect
-	cosmossdk.io/math v1.4.0 // indirect
 	cosmossdk.io/schema v1.0.0 // indirect
 	cosmossdk.io/store v1.10.0-rc.1.0.20241218084712-ca559989da43 // indirect
 	cosmossdk.io/x/tx v1.0.0-alpha.3 // indirect
