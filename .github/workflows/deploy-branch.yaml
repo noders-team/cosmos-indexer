@@ -128,12 +128,13 @@ jobs:
                 --log.level=info \
                 --base.start-block=${{ vars.BASE_START_BLOCK }} \
                 --base.end-block=${{ vars.BASE_END_BLOCK || -1 }} \
-                --base.throttling=${{ vars.BASE_THROTTLING || 2.005 }} \
-                --base.rpc-workers=${{ vars.BASE_RPC_WORKERS || 1 }} \
+                --base.throttling=${{ vars.BASE_THROTTLING || 0.105 }} \
+                --base.rpc-workers=${{ vars.BASE_RPC_WORKERS || 3 }} \
                 --base.index-transactions=${{ vars.BASE_INDEX_TRANSACTIONS || true }} \
+                --base.index-evm-transactions=${{ vars.BASE_INDEX_EVM_TRANSACTIONS || false }} \
                 --base.reindex=${{ vars.BASE_REINDEX || false }} \
-                --base.mode-blocks-step=${{ vars.BASE_GENESIS_BLOCKS_STEP || 5000}} \
                 --probe.rpc=${{ vars.PROBE_RPC }} \
+                --probe.evm-rpc-url=${{ vars.PROBE_EVM_RPC_URL || '' }} \
                 --probe.account-prefix=${{ vars.PROBE_ACCOUNT_PREFIX }} \
                 --probe.chain-id=${{ vars.PROBE_CHAIN_ID }} \
                 --probe.chain-name=${{ vars.PROBE_CHAIN_NAME }} \
