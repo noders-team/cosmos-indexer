@@ -44,7 +44,9 @@ jobs:
       - name: Choose go.mod file
         run: |
           GO_MOD_FILE=${{ vars.GO_MOD_FILE || 'go.mod.or' }}
-          mv $GO_MOD_FILE go.mod
+          if [ "$GO_MOD_FILE" != "go.mod" ]; then
+            mv $GO_MOD_FILE go.mod
+          fi
 
       - name: Run go mod tidy
         run: |
@@ -149,7 +151,7 @@ jobs:
                 --base.index-transactions=${{ vars.BASE_INDEX_TRANSACTIONS || true }} \
                 --base.index-evm-transactions=${{ vars.BASE_INDEX_EVM_TRANSACTIONS || false }} \
                 --base.reindex=${{ vars.BASE_REINDEX || false }} \
-                --probe.rpc=${{ vars.PROBE_RPC }} \
+                --probe.rpc=${{ vars.PROBE_RPC || '' }} \
                 --probe.evm-rpc-url=${{ vars.PROBE_EVM_RPC_URL || '' }} \
                 --probe.account-prefix=${{ vars.PROBE_ACCOUNT_PREFIX }} \
                 --probe.chain-id=${{ vars.PROBE_CHAIN_ID }} \
