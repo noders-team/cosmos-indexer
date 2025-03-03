@@ -55,10 +55,14 @@ jobs:
           go mod vendor
 
       - name: Build Docker Image
-        run: sudo docker build -t ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.event.inputs.branch }}-${{ github.event.inputs.environment }} --build-arg TARGETPLATFORM=linux/amd64 .
+        run: |
+          BRANCH_NAME=$(echo "${{ github.event.inputs.branch }}" | tr '/' '-')
+          sudo docker build -t ghcr.io/${{ github.repository }}/cosmos-indexer:${BRANCH_NAME}-${{ github.event.inputs.environment }} --build-arg TARGETPLATFORM=linux/amd64 .
 
       - name: Push Docker Image
-        run: sudo docker push ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.event.inputs.branch }}-${{ github.event.inputs.environment }}
+        run: |
+          BRANCH_NAME=$(echo "${{ github.event.inputs.branch }}" | tr '/' '-')
+          sudo docker push ghcr.io/${{ github.repository }}/cosmos-indexer:${BRANCH_NAME}-${{ github.event.inputs.environment }}
 
   deploy:
     needs: build
