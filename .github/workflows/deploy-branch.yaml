@@ -54,7 +54,9 @@ jobs:
       - name: Run go mod tidy
         run: |
           go mod tidy
-          go mod vendor
+          if [[ "${{ vars.BASE_INDEX_EVM_TRANSACTIONS }}" != "true" ]]; then
+            go mod vendor
+          fi
 
       - name: Build Docker Image
         run: |
