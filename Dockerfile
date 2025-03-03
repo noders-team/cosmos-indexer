@@ -64,13 +64,13 @@ COPY --from=build-env /lib/ld-musl*.so.1* /lib
 COPY --from=build-env /usr/lib/libonig.so.5 /lib
 
 # curl Libraries
-COPY --from=build-env /usr/lib/libcurl.so.4 /lib
-COPY --from=build-env /lib/libz.so.1 /lib
-COPY --from=build-env /usr/lib/libnghttp2.so.14 /lib
-COPY --from=build-env /lib/libssl.so.3 /lib
-COPY --from=build-env /lib/libcrypto.so.3 /lib
-COPY --from=build-env /usr/lib/libbrotlidec.so.1 /lib
-COPY --from=build-env /usr/lib/libbrotlicommon.so.1 /lib
+#COPY --from=build-env /usr/lib/libcurl.so.4 /lib
+#COPY --from=build-env /lib/libz.so.1 /lib
+#COPY --from=build-env /usr/lib/libnghttp2.so.14 /lib
+#COPY --from=build-env /lib/libssl.so.3 /lib
+#COPY --from=build-env /lib/libcrypto.so.3 /lib
+#COPY --from=build-env /usr/lib/libbrotlidec.so.1 /lib
+#COPY --from=build-env /usr/lib/libbrotlicommon.so.1 /lib
 
 # htop/atop libs
 COPY --from=build-env /usr/lib/libncursesw.so.6 /lib
