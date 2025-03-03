@@ -122,7 +122,8 @@ jobs:
             fi
 
             # Pull the latest cosmos-indexer image
-            sudo docker pull ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.event.inputs.branch }}-${{ github.event.inputs.environment }}
+            BRANCH_NAME=$(echo "${{ github.event.inputs.branch }}" | tr '/' '-')
+            sudo docker pull ghcr.io/${{ github.repository }}/cosmos-indexer:${BRANCH_NAME}-${{ github.event.inputs.environment }}
 
             # Start a new cosmos-indexer container with environment variables
             sudo docker run -d --name cosmos-indexer \
@@ -130,7 +131,7 @@ jobs:
               -p 127.0.0.1:9002:9002 \
               --restart unless-stopped \
               --network indexer_network \
-              ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.event.inputs.branch }}-${{ github.event.inputs.environment }} \
+              ghcr.io/${{ github.repository }}/cosmos-indexer:${BRANCH_NAME}-${{ github.event.inputs.environment }} \
               /bin/sh -c "cosmos-indexer index \
                 --log.pretty=true \
                 --log.level=info \
