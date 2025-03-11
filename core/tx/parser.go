@@ -11,6 +11,7 @@ import (
 	"cosmossdk.io/math"
 	"github.com/noders-team/cosmos-indexer/probe"
 
+	banktypes "cosmossdk.io/x/bank/types"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/cosmos/cosmos-sdk/types"
 	cosmosTx "github.com/cosmos/cosmos-sdk/types/tx"
@@ -553,9 +554,9 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 		var indexerTx txtypes.IndexerTx
 		var txBody txtypes.Body
 		var currLogMsgs []txtypes.LogMessage
+		var currMessages []types.Msg
 		var messagesRaw [][]byte
 
-		txBody.Messages = make([]types.Msg, 0)
 		indexerTx.Body = txBody
 
 		currTxResp := data.EvmTransactions[txIdx]
@@ -565,7 +566,7 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 			TimeStamp: currTxResp.Timestamp.String(),
 			RawLog:    currTxResp.Data,
 			Log:       currLogMsgs,
-			Code:      1,
+			Code:      uint32(currTxResp.Status),
 			GasUsed:   int64(currTxResp.Gas),
 			GasWanted: int64(currTxResp.Gas),
 			Info:      "",
@@ -590,6 +591,18 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 		indexerMergedTx.TxResponse = indexerTxResp
 		indexerMergedTx.Tx = indexerTx
 		indexerMergedTx.Tx.AuthInfo = authInfo
+
+		dec, err := decimal.NewFromString(currTxResp.Value)
+		if err == nil {
+			coins := []types.Coin{types.NewCoin("eth", math.NewInt(dec.IntPart()))}
+			msg := banktypes.MsgSend{
+				FromAddress: currTxResp.From,
+				ToAddress:   currTxResp.To,
+				Amount:      coins,
+			}
+			currMessages = append(currMessages, &msg)
+		}
+		indexerMergedTx.Tx.Body.Messages = currMessages
 
 		processedTx, _, err := a.processor.ProcessTx(indexerMergedTx, messagesRaw)
 		if err != nil {

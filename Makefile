@@ -80,6 +80,12 @@ build:
 	go mod vendor
 	go build -o bin/cosmos-indexer .
 
+build_bera:
+	cp -f go.mod.br go.mod
+	go mod tidy
+	go mod vendor
+	go build -o bin/cosmos-indexer .
+
 run_dev:
 	go build . && \
 		./cosmos-indexer index \

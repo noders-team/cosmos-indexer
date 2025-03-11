@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/rs/zerolog/log"
 	"math"
 	"strconv"
 	"strings"
@@ -211,8 +212,11 @@ func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]
 			}
 
 			if err := json.Unmarshal(receiptResp.Body(), &receiptResult); err == nil {
-				statusInt, _ := strconv.ParseUint(strings.TrimPrefix(receiptResult.Result.Status, "0x"), 16, 64)
-				tx.Status = statusInt
+				status, err := strconv.ParseUint(strings.TrimPrefix(receiptResult.Result.Status, "0x"), 16, 64)
+				if err != nil {
+					log.Error().Err(err).Msgf("error parsing status %s", receiptResult.Result.Status)
+				}
+				tx.Status = status
 			}
 		}
 

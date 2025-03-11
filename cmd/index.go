@@ -860,9 +860,14 @@ func (idxr *Indexer) processBlocks(wg *sync.WaitGroup,
 			var txDBWrappers []dbTypes.TxDBWrapper
 			var err error
 
-			if idxr.cfg.Base.TransactionEVMIndexingEnabled {
+			switch {
+			case idxr.cfg.Base.TransactionEVMIndexingEnabled:
 				txDBWrappers, err = idxr.txParser.ProcessEvmTxs(&blockData)
-			} else {
+				if err == nil {
+					block.TotalTxs = len(txDBWrappers)
+				}
+				break
+			default:
 				if blockData.GetTxsResponse != nil && len(blockData.GetTxsResponse.Txs) > 0 {
 					config.Log.Infof("Processing TXs from RPC TX Search response size: %d total %d",
 						len(blockData.GetTxsResponse.Txs),
