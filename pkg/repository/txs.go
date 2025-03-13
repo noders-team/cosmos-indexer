@@ -41,7 +41,7 @@ type Txs interface {
 		limit int64, offset int64) ([]*model.Tx, int64, error)
 	GetVotes(ctx context.Context, accountAddress string, uniqueProposals bool, limit int64, offset int64) ([]*model.VotesTransaction, int64, error)
 	GetVotesByAccounts(ctx context.Context, accounts []string, excludeAccounts bool, voteOption string,
-		proposalID int, byAccAddress *string, limit int64, offset int64, sortBy *model.SortBy) ([]*model.VotesTransaction, int64, error)
+		proposalID int, byAccAddress *string, voteUnique bool, limit int64, offset int64, sortBy *model.SortBy) ([]*model.VotesTransaction, int64, error)
 	GetWalletsCountPerPeriod(ctx context.Context, startDate, endDate time.Time) (int64, error)
 	GetWalletsWithTx(ctx context.Context, limit int64, offset int64) ([]*model.WalletWithTxs, int64, error)
 	TxCountByAccounts(ctx context.Context, accounts []string) ([]*model.WalletWithTxs, error)
@@ -1150,7 +1150,7 @@ func (r *txs) GetVotes(ctx context.Context, accountAddress string, uniqueProposa
 }
 
 func (r *txs) GetVotesByAccounts(ctx context.Context, accounts []string, excludeAccounts bool, voteOption string,
-	proposalID int, byAccAddress *string, limit int64, offset int64, sortBy *model.SortBy,
+	proposalID int, byAccAddress *string, voteUnique bool, limit int64, offset int64, sortBy *model.SortBy,
 ) ([]*model.VotesTransaction, int64, error) {
 	dialect := goqu.Select(
 		"vn.hash",
@@ -1173,6 +1173,15 @@ func (r *txs) GetVotesByAccounts(ctx context.Context, accounts []string, exclude
 
 	if byAccAddress != nil && *byAccAddress != "" {
 		dialect = dialect.Where(goqu.I("vn.voter").Eq(byAccAddress))
+	}
+	if voteUnique {
+		subquery := goqu.Select(goqu.MAX("vn_inner.timestamp")).
+			From(goqu.T("votes_normalized").As("vn_inner")).
+			Where(goqu.I("vn_inner.voter").Eq(goqu.I("vn.voter"))).
+			Where(goqu.I("vn_inner.option").Eq(goqu.I("vn.option"))).
+			Where(goqu.I("vn_inner.proposal_id").Eq(goqu.I("vn.proposal_id")))
+
+		dialect = dialect.Where(goqu.I("vn.timestamp").Eq(subquery))
 	}
 	if sortBy != nil && sortBy.By != "" {
 		if strings.EqualFold(sortBy.Direction, "asc") {
