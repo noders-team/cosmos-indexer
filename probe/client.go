@@ -27,14 +27,14 @@ type ChainClient struct {
 }
 
 func (cc *ChainClient) Invoke(ctx context.Context, method string, args, reply interface{}, opts ...grpc.CallOption) error {
-	//TODO implement me
-	//panic("implement me")
+	// TODO implement me
+	// panic("implement me")
 	return nil
 }
 
 func (cc *ChainClient) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
-	//TODO implement me
-	//panic("implement me")
+	// TODO implement me
+	// panic("implement me")
 	return nil, nil
 }
 

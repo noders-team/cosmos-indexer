@@ -2,9 +2,10 @@ package query
 
 import (
 	"context"
-	"github.com/noders-team/cosmos-indexer/probe"
 	"strconv"
 	"time"
+
+	"github.com/noders-team/cosmos-indexer/probe"
 
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	grpctypes "github.com/cosmos/cosmos-sdk/types/grpc"

@@ -3,10 +3,11 @@ package db
 import (
 	"encoding/base64"
 	"encoding/json"
+	"time"
+
 	"github.com/noders-team/cosmos-indexer/db/models"
 	"github.com/noders-team/cosmos-indexer/parsers"
 	"github.com/noders-team/cosmos-indexer/pkg/model"
-	"time"
 )
 
 type BlockDBWrapper struct {

@@ -6,11 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/rs/zerolog/log"
 	"math"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/noders-team/cosmos-indexer/probe"
 	"github.com/noders-team/cosmos-indexer/probe/query"
@@ -126,7 +127,6 @@ func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]
 		SetHeader("Content-Type", "application/json").
 		SetBody(requestBody).
 		Post(c.cl.EvmRestURl)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to call EVM RPC: %w", err)
 	}
@@ -138,13 +138,13 @@ func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]
 		} `json:"result"`
 	}
 
-	if err := json.Unmarshal(resp.Body(), &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal EVM RPC response: %w", err)
+	body := resp.Body()
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal EVM RPC response: %s %w", string(body), err)
 	}
 
 	// If result.Result is nil, it means the block doesn't exist in the EVM layer
 	if result.Result.Hash == "" {
-
 		return []*db.EvmTransaction{}, nil
 	}
 
@@ -165,7 +165,12 @@ func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]
 		}
 
 		if value, ok := txData["value"].(string); ok {
-			tx.Value = value
+			decimalValue, err := strconv.ParseInt(value, 0, 64)
+			if err == nil {
+				tx.Value = fmt.Sprintf("%d", decimalValue)
+			} else {
+				log.Err(err).Msgf("failed to convert value %s to decimal", value)
+			}
 		}
 
 		if data, ok := txData["input"].(string); ok {
@@ -179,7 +184,12 @@ func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]
 		}
 
 		if gasPrice, ok := txData["gasPrice"].(string); ok {
-			tx.GasPrice = gasPrice
+			decimalValue, err := strconv.ParseInt(gasPrice, 0, 64)
+			if err == nil {
+				tx.GasPrice = strconv.Itoa(int(decimalValue))
+			} else {
+				log.Err(err).Msgf("failed to convert value %s to decimal", decimalValue)
+			}
 		}
 
 		if nonce, ok := txData["nonce"].(string); ok {

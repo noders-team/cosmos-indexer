@@ -8,10 +8,11 @@ import (
 	"time"
 	"unsafe"
 
+	banktypes "cosmossdk.io/x/bank/types"
+
 	"cosmossdk.io/math"
 	"github.com/noders-team/cosmos-indexer/probe"
 
-	banktypes "cosmossdk.io/x/bank/types"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/cosmos/cosmos-sdk/types"
 	cosmosTx "github.com/cosmos/cosmos-sdk/types/tx"
@@ -601,6 +602,8 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 				Amount:      coins,
 			}
 			currMessages = append(currMessages, &msg)
+		} else {
+			log.Err(err).Msgf("error parsing value %s", currTxResp.Value)
 		}
 		indexerMergedTx.Tx.Body.Messages = currMessages
 
@@ -625,7 +628,7 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 		processedTx.Tx.Fees = fees
 
 		// extra fields
-		//processedTx.Tx.Signatures = []byte("")
+		// processedTx.Tx.Signatures = []byte("")
 		processedTx.Tx.Memo = ""
 		processedTx.Tx.TimeoutHeight = 0
 
@@ -668,6 +671,52 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 		}
 
 		processedTx.Tx.AuthInfo = txAuthInfo
+
+		var messages []dbTypes.MessageDBWrapper
+		uniqueMessageTypes := make(map[string]model.MessageType)
+		uniqueEventTypes := make(map[string]model.MessageEventType)
+		uniqueEventAttributeKeys := make(map[string]model.MessageEventAttributeKey)
+		for messageIndex, message := range currMessages {
+			if message != nil {
+				var messageLogs []txtypes.LogMessage
+				var events []txtypes.LogMessageEvent
+
+				events = append(events, txtypes.LogMessageEvent{
+					Type: "transfer",
+					Attributes: []txtypes.Attribute{
+						{
+							Key:   "sender",
+							Value: currTxResp.From,
+						},
+						{
+							Key:   "recipient",
+							Value: currTxResp.To,
+						},
+						{
+							Key:   "amount",
+							Value: currTxResp.Value,
+						},
+					},
+				})
+
+				messageLogs = append(messageLogs, txtypes.LogMessage{
+					MessageIndex: messageIndex,
+					Events:       events,
+				})
+
+				messageType, currMessageDBWrapper := a.processor.ProcessMessage(messageIndex, message,
+					messageLogs, uniqueEventTypes, uniqueEventAttributeKeys)
+				currMessageDBWrapper.Message.MessageBytes = make([]byte, 0)
+				uniqueMessageTypes[messageType] = currMessageDBWrapper.Message.MessageType
+				config.Log.Info(fmt.Sprintf("[Block: %v] [TX: %v] Found msg of type '%v'.", processedTx.Tx.Block.Height, processedTx.Tx.Hash, messageType))
+				messages = append(messages, currMessageDBWrapper)
+			}
+		}
+
+		processedTx.Messages = messages
+		processedTx.UniqueMessageTypes = uniqueMessageTypes
+		processedTx.UniqueMessageAttributeKeys = uniqueEventAttributeKeys
+		processedTx.UniqueMessageEventTypes = uniqueEventTypes
 
 		currTxDbWrappers[txIdx] = processedTx
 	}

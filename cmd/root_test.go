@@ -121,7 +121,7 @@ func TestDecodingTxsBera(t *testing.T) {
 		IndexTransactions: true,
 	})
 	require.NotNil(t, blData)
-	//require.Len(t, blData.BlockResultsData.TxResults, 3)
+	// require.Len(t, blData.BlockResultsData.TxResults, 3)
 	require.NotNil(t, blData.BlockResultsData)
 
 	probeCl := probe.GetProbeClient(probeCfg)

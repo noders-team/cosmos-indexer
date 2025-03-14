@@ -8,7 +8,7 @@ import (
 	//"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	//cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	"github.com/cosmos/cosmos-sdk/std"
-	//sdk "github.com/cosmos/cosmos-sdk/types"
+	// sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
 	"github.com/cosmos/cosmos-sdk/x/auth/tx"
@@ -22,20 +22,19 @@ type Codec struct {
 }
 
 func MakeCodec(modules []module.AppModule) Codec {
-
 	//modBasic := module.NewBasicManager()
 	//for _, mb := range moduleBasics {
 	//	modBasic.RegisterModule(mb)
 	//}
 	encCfg := MakeCodecConfig()
 
-	//std.RegisterLegacyAminoCodec(encCfg.Amino)
-	//std.RegisterInterfaces(encCfg.InterfaceRegistry)
-	//modBasic.RegisterLegacyAminoCodec(encodingConfig.Amino)
-	//modBasic.RegisterInterfaces(encodingConfig.InterfaceRegistry)
+	// std.RegisterLegacyAminoCodec(encCfg.Amino)
+	// std.RegisterInterfaces(encCfg.InterfaceRegistry)
+	// modBasic.RegisterLegacyAminoCodec(encodingConfig.Amino)
+	// modBasic.RegisterInterfaces(encodingConfig.InterfaceRegistry)
 
 	mb := module.NewManager(modules...)
-	//std.RegisterLegacyAminoCodec(encCfg.Amino)
+	// std.RegisterLegacyAminoCodec(encCfg.Amino)
 	std.RegisterInterfaces(encCfg.InterfaceRegistry)
 	mb.RegisterLegacyAminoCodec(encCfg.Amino)
 	mb.RegisterInterfaces(encCfg.InterfaceRegistry)
@@ -56,10 +55,10 @@ func RegisterTendermintLiquidityInterfaces(aminoCodec *codec.LegacyAmino, regist
 
 func MakeCodecConfig() Codec {
 	ir := types.NewInterfaceRegistry()
-	//interfaceRegistry.RegisterInterface("cosmos.crypto.Pubkey", (*cryptotypes.PubKey)(nil))
-	//interfaceRegistry.RegisterImplementations((*cryptotypes.PubKey)(nil), &ed25519.PubKey{})
-	//interfaceRegistry.RegisterImplementations((*cryptotypes.PubKey)(nil), &secp256k1.PubKey{})
-	//interfaceRegistry.RegisterImplementations((*cryptotypes.PubKey)(nil), &multisig.LegacyAminoPubKey{})
+	// interfaceRegistry.RegisterInterface("cosmos.crypto.Pubkey", (*cryptotypes.PubKey)(nil))
+	// interfaceRegistry.RegisterImplementations((*cryptotypes.PubKey)(nil), &ed25519.PubKey{})
+	// interfaceRegistry.RegisterImplementations((*cryptotypes.PubKey)(nil), &secp256k1.PubKey{})
+	// interfaceRegistry.RegisterImplementations((*cryptotypes.PubKey)(nil), &multisig.LegacyAminoPubKey{})
 
 	cdc := codec.NewProtoCodec(ir)
 
@@ -67,7 +66,7 @@ func MakeCodecConfig() Codec {
 
 	signModes := []signing.SignMode{
 		signing.SignMode_SIGN_MODE_DIRECT,
-		//signing.SignMode_SIGN_MODE_LEGACY_AMINO_JSON,
+		// signing.SignMode_SIGN_MODE_LEGACY_AMINO_JSON,
 	}
 
 	return Codec{

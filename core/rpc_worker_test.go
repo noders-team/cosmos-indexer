@@ -1,9 +1,10 @@
 package core
 
 import (
-	"github.com/noders-team/cosmos-indexer/probe"
 	"net/http"
 	"testing"
+
+	"github.com/noders-team/cosmos-indexer/probe"
 
 	"github.com/noders-team/cosmos-indexer/clients"
 	"github.com/noders-team/cosmos-indexer/config"

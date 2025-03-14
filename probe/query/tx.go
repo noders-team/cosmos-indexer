@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"fmt"
+
 	"github.com/noders-team/cosmos-indexer/probe"
 
 	txTypes "github.com/cosmos/cosmos-sdk/types/tx"
@@ -17,12 +18,13 @@ func TxsAtHeightRPC(q *Query, height int64, codec probe.Codec, page, limit uint6
 	orderBy := txTypes.OrderBy_ORDER_BY_UNSPECIFIED
 
 	req := &txTypes.GetTxsEventRequest{
-		//Events:  []string{"tx.height=" + fmt.Sprintf("%d", height)},
+		// Events:  []string{"tx.height=" + fmt.Sprintf("%d", height)},
 		Query:   fmt.Sprintf("tx.height=%d", height),
 		Events:  []string{fmt.Sprintf("tx.height=%d", height)},
 		Page:    page,
 		Limit:   limit,
-		OrderBy: orderBy}
+		OrderBy: orderBy,
+	}
 	return TxsRPC(q, req, codec)
 }
 
