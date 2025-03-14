@@ -5,10 +5,12 @@ import (
 	"math/big"
 	"time"
 
+	cryptoTypes "github.com/cosmos/cosmos-sdk/crypto/types"
+	"github.com/noders-team/cosmos-indexer/probe"
+
 	"github.com/noders-team/cosmos-indexer/pkg/model"
 
-	"github.com/cosmos/cosmos-sdk/crypto/keys/multisig"
-	cryptoTypes "github.com/cosmos/cosmos-sdk/crypto/types"
+	"github.com/araddon/dateparse"
 	"github.com/cosmos/cosmos-sdk/types"
 	cosmosTx "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/noders-team/cosmos-indexer/config"
@@ -16,7 +18,6 @@ import (
 	dbTypes "github.com/noders-team/cosmos-indexer/db"
 	"github.com/noders-team/cosmos-indexer/db/models"
 	"github.com/noders-team/cosmos-indexer/util"
-	"github.com/nodersteam/probe/client"
 	"github.com/rs/zerolog/log"
 )
 
@@ -33,15 +34,15 @@ type Processor interface {
 }
 
 type processor struct {
-	cl *client.ChainClient
+	cl *probe.ChainClient
 }
 
-func NewProcessor(cl *client.ChainClient) Processor {
+func NewProcessor(cl *probe.ChainClient) Processor {
 	return &processor{cl: cl}
 }
 
 func (a *processor) ProcessTx(tx txtypes.MergedTx, messagesRaw [][]byte) (txDBWapper dbTypes.TxDBWrapper, txTime time.Time, err error) {
-	txTime, err = time.Parse(time.RFC3339, tx.TxResponse.TimeStamp)
+	txTime, err = dateparse.ParseAny(tx.TxResponse.TimeStamp)
 	if err != nil {
 		config.Log.Error("Error parsing tx timestamp.", err)
 		return txDBWapper, txTime, err
@@ -60,7 +61,11 @@ func (a *processor) ProcessTx(tx txtypes.MergedTx, messagesRaw [][]byte) (txDBWa
 			if message != nil {
 				messageType, currMessageDBWrapper := a.ProcessMessage(messageIndex, message,
 					tx.TxResponse.Log, uniqueEventTypes, uniqueEventAttributeKeys)
-				currMessageDBWrapper.Message.MessageBytes = messagesRaw[messageIndex]
+				if len(messagesRaw) == 0 {
+					currMessageDBWrapper.Message.MessageBytes = make([]byte, 0)
+				} else {
+					currMessageDBWrapper.Message.MessageBytes = messagesRaw[messageIndex]
+				}
 				uniqueMessageTypes[messageType] = currMessageDBWrapper.Message.MessageType
 				config.Log.Debug(fmt.Sprintf("[Block: %v] [TX: %v] Found msg of type '%v'.", tx.TxResponse.Height, tx.TxResponse.TxHash, messageType))
 				messages = append(messages, currMessageDBWrapper)
@@ -107,32 +112,45 @@ func (a *processor) ProcessSigners(authInfo *cosmosTx.AuthInfo,
 				return nil, nil, err
 			}
 
-			multisigKey, ok := pubKey.(*multisig.LegacyAminoPubKey)
+			/*
+				multisigKey, ok := pubKey.(*multisig.LegacyAminoPubKey)
 
-			if ok {
-				for _, key := range multisigKey.GetPubKeys() {
-					address := types.AccAddress(key.Address().Bytes()).String()
+				if ok {
+					for _, key := range multisigKey.GetPubKeys() {
+						address := types.AccAddress(key.Address().Bytes()).String()
+						if _, ok := signerAddressMap[address]; !ok {
+							signerAddressArray = append(signerAddressArray, models.Address{Address: address})
+						}
+						signerAddr := models.Address{Address: address}
+						signerAddressMap[address] = signerAddr
+						info.Address = &signerAddr
+					}
+				} else {
+					castPubKey, ok := pubKey.(cryptoTypes.PubKey)
+					if !ok {
+						return nil, nil, err
+					}
+
+					address := types.AccAddress(castPubKey.Address().Bytes()).String()
 					if _, ok := signerAddressMap[address]; !ok {
 						signerAddressArray = append(signerAddressArray, models.Address{Address: address})
 					}
 					signerAddr := models.Address{Address: address}
 					signerAddressMap[address] = signerAddr
 					info.Address = &signerAddr
-				}
-			} else {
-				castPubKey, ok := pubKey.(cryptoTypes.PubKey)
-				if !ok {
-					return nil, nil, err
-				}
-
-				address := types.AccAddress(castPubKey.Address().Bytes()).String()
-				if _, ok := signerAddressMap[address]; !ok {
-					signerAddressArray = append(signerAddressArray, models.Address{Address: address})
-				}
-				signerAddr := models.Address{Address: address}
-				signerAddressMap[address] = signerAddr
-				info.Address = &signerAddr
+				}*/
+			castPubKey, ok := pubKey.(cryptoTypes.PubKey)
+			if !ok {
+				return nil, nil, err
 			}
+
+			address := types.AccAddress(castPubKey.Address().Bytes()).String()
+			if _, ok := signerAddressMap[address]; !ok {
+				signerAddressArray = append(signerAddressArray, models.Address{Address: address})
+			}
+			signerAddr := models.Address{Address: address}
+			signerAddressMap[address] = signerAddr
+			info.Address = &signerAddr
 
 			info.Sequence = signerInfo.Sequence
 			info.ModeInfo = signerInfo.ModeInfo.String()
@@ -163,6 +181,7 @@ func (a *processor) ProcessSigners(authInfo *cosmosTx.AuthInfo,
 func (a *processor) ProcessFees(authInfo cosmosTx.AuthInfo, signers []models.Address) ([]model.Fee, error) {
 	// TODO not the best way
 	if authInfo.Fee == nil {
+		log.Info().Msgf("ProcessFees: authInfo.Fee is nil")
 		fees := make([]model.Fee, 0)
 		return fees, nil
 	}

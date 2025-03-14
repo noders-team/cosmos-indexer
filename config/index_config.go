@@ -23,24 +23,25 @@ type IndexConfig struct {
 type IndexBase struct {
 	throttlingBase
 	RetryBase
-	Mode                       string    `mapstructure:"mode"`
-	ModeTopics                 *[]string `mapstructure:"mode-storage-topics"`
-	ModeCoolDownMins           int       `mapstructure:"mode-cooldown-mins"`
-	ModeCoolDownCount          int       `mapstructure:"mode-cooldown-count"`
-	ModeBlocksStep             int64     `mapstructure:"mode-blocks-step"`
-	ReindexMessageType         string    `mapstructure:"reindex-message-type"`
-	ReattemptFailedBlocks      bool      `mapstructure:"reattempt-failed-blocks"`
-	StartBlock                 int64     `mapstructure:"start-block"`
-	EndBlock                   int64     `mapstructure:"end-block"`
-	BlockInputFile             string    `mapstructure:"block-input-file"`
-	ReIndex                    bool      `mapstructure:"reindex"`
-	RPCWorkers                 int64     `mapstructure:"rpc-workers"`
-	BlockTimer                 int64     `mapstructure:"block-timer"`
-	WaitForChain               bool      `mapstructure:"wait-for-chain"`
-	WaitForChainDelay          int64     `mapstructure:"wait-for-chain-delay"`
-	TransactionIndexingEnabled bool      `mapstructure:"index-transactions"`
-	ExitWhenCaughtUp           bool      `mapstructure:"exit-when-caught-up"`
-	FilterFile                 string    `mapstructure:"filter-file"`
+	Mode                          string    `mapstructure:"mode"`
+	ModeTopics                    *[]string `mapstructure:"mode-storage-topics"`
+	ModeCoolDownMins              int       `mapstructure:"mode-cooldown-mins"`
+	ModeCoolDownCount             int       `mapstructure:"mode-cooldown-count"`
+	ModeBlocksStep                int64     `mapstructure:"mode-blocks-step"`
+	ReindexMessageType            string    `mapstructure:"reindex-message-type"`
+	ReattemptFailedBlocks         bool      `mapstructure:"reattempt-failed-blocks"`
+	StartBlock                    int64     `mapstructure:"start-block"`
+	EndBlock                      int64     `mapstructure:"end-block"`
+	BlockInputFile                string    `mapstructure:"block-input-file"`
+	ReIndex                       bool      `mapstructure:"reindex"`
+	RPCWorkers                    int64     `mapstructure:"rpc-workers"`
+	BlockTimer                    int64     `mapstructure:"block-timer"`
+	WaitForChain                  bool      `mapstructure:"wait-for-chain"`
+	WaitForChainDelay             int64     `mapstructure:"wait-for-chain-delay"`
+	TransactionIndexingEnabled    bool      `mapstructure:"index-transactions"`
+	TransactionEVMIndexingEnabled bool      `mapstructure:"index-evm-transactions"`
+	ExitWhenCaughtUp              bool      `mapstructure:"exit-when-caught-up"`
+	FilterFile                    string    `mapstructure:"filter-file"`
 }
 
 // Flags for specific, deeper indexing behavior
@@ -57,7 +58,9 @@ func SetupIndexSpecificFlags(conf *IndexConfig, cmd *cobra.Command) {
 	cmd.PersistentFlags().BoolVar(&conf.Base.ReattemptFailedBlocks, "base.reattempt-failed-blocks", false, "re-enqueue failed blocks for reattempts at startup.")
 	cmd.PersistentFlags().StringVar(&conf.Base.ReindexMessageType, "base.reindex-message-type", "", "a Cosmos message type URL. When set, the block enqueue method will reindex all blocks between start and end block that contain this message type.")
 	// block event indexing
-	cmd.PersistentFlags().BoolVar(&conf.Base.TransactionIndexingEnabled, "base.index-transactions", false, "enable transaction indexing?")
+	cmd.PersistentFlags().BoolVar(&conf.Base.TransactionIndexingEnabled, "base.index-transactions", true, "enable transaction indexing?")
+	cmd.PersistentFlags().BoolVar(&conf.Base.TransactionEVMIndexingEnabled, "base.index-evm-transactions", false, "evm enable transaction indexing?")
+
 	// filter configs
 	cmd.PersistentFlags().StringVar(&conf.Base.FilterFile, "base.filter-file", "", "path to a file containing a JSON config of block event and message type filters to apply to beginblocker events, endblocker events and TX messages")
 	// other base setting
@@ -101,12 +104,12 @@ func (conf *IndexConfig) Validate() error {
 		return err
 	}
 
-	if !conf.Base.TransactionIndexingEnabled {
+	if !conf.Base.TransactionIndexingEnabled && !conf.Base.TransactionEVMIndexingEnabled {
 		return errors.New("must enable at least one of base.index-transactions")
 	}
 
 	// Check for required configs when base indexer is enabled
-	if conf.Base.TransactionIndexingEnabled {
+	if conf.Base.TransactionIndexingEnabled || conf.Base.TransactionEVMIndexingEnabled {
 		if conf.Base.StartBlock == 0 {
 			return errors.New("base.start-block must be set when index-chain is enabled")
 		}
