@@ -226,6 +226,11 @@ func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]
 				if err != nil {
 					log.Error().Err(err).Msgf("error parsing status %s", receiptResult.Result.Status)
 				}
+				if status == 1 {
+					status = 0
+				} else {
+					status = 1
+				}
 				tx.Status = status
 			}
 		}
