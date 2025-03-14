@@ -1,14 +1,13 @@
 package tx
 
 import (
+	banktypes "cosmossdk.io/x/bank/types"
 	"encoding/hex"
 	"fmt"
 	"reflect"
 	"strings"
 	"time"
 	"unsafe"
-
-	banktypes "cosmossdk.io/x/bank/types"
 
 	"cosmossdk.io/math"
 	"github.com/noders-team/cosmos-indexer/probe"
@@ -546,6 +545,7 @@ func ChainSpecificMessageTypeHandlerBootstrap(chainID string) {
 
 func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDBWrapper, error) {
 	if len(data.EvmTransactions) == 0 {
+		log.Warn().Msgf("No EVM transactions to process, block %d", data.BlockData.Block.Height)
 		return nil, nil
 	}
 	currTxDbWrappers := make([]dbTypes.TxDBWrapper, len(data.EvmTransactions))
@@ -592,20 +592,6 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 		indexerMergedTx.TxResponse = indexerTxResp
 		indexerMergedTx.Tx = indexerTx
 		indexerMergedTx.Tx.AuthInfo = authInfo
-
-		dec, err := decimal.NewFromString(currTxResp.Value)
-		if err == nil {
-			coins := []types.Coin{types.NewCoin("eth", math.NewInt(dec.IntPart()))}
-			msg := banktypes.MsgSend{
-				FromAddress: currTxResp.From,
-				ToAddress:   currTxResp.To,
-				Amount:      coins,
-			}
-			currMessages = append(currMessages, &msg)
-		} else {
-			log.Err(err).Msgf("error parsing value %s", currTxResp.Value)
-		}
-		indexerMergedTx.Tx.Body.Messages = currMessages
 
 		processedTx, _, err := a.processor.ProcessTx(indexerMergedTx, messagesRaw)
 		if err != nil {
@@ -671,6 +657,21 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 		}
 
 		processedTx.Tx.AuthInfo = txAuthInfo
+
+		// processing messages
+		dec, err := decimal.NewFromString(currTxResp.Value)
+		if err == nil {
+			coins := []types.Coin{types.NewCoin("eth", math.NewInt(dec.IntPart()))}
+			msg := banktypes.MsgSend{
+				FromAddress: currTxResp.From,
+				ToAddress:   currTxResp.To,
+				Amount:      coins,
+			}
+			currMessages = append(currMessages, &msg)
+		} else {
+			log.Err(err).Msgf("error parsing value %s", currTxResp.Value)
+		}
+		indexerMergedTx.Tx.Body.Messages = currMessages
 
 		var messages []dbTypes.MessageDBWrapper
 		uniqueMessageTypes := make(map[string]model.MessageType)

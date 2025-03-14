@@ -296,7 +296,7 @@ func (w *blockRPCWorker) proceedEvmTx(ctx context.Context, currentHeightIndexerD
 	if err != nil {
 		return err
 	}
-	log.Debug().Msgf("EVM txs for block %d: %d", blockHeight, len(txsEventResp))
+	log.Info().Msgf("EVM txs for block %d: %d", blockHeight, len(txsEventResp))
 	currentHeightIndexerData.EvmTransactions = txsEventResp
 
 	return nil

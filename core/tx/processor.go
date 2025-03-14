@@ -61,7 +61,11 @@ func (a *processor) ProcessTx(tx txtypes.MergedTx, messagesRaw [][]byte) (txDBWa
 			if message != nil {
 				messageType, currMessageDBWrapper := a.ProcessMessage(messageIndex, message,
 					tx.TxResponse.Log, uniqueEventTypes, uniqueEventAttributeKeys)
-				currMessageDBWrapper.Message.MessageBytes = messagesRaw[messageIndex]
+				if len(messagesRaw) == 0 {
+					currMessageDBWrapper.Message.MessageBytes = make([]byte, 0)
+				} else {
+					currMessageDBWrapper.Message.MessageBytes = messagesRaw[messageIndex]
+				}
 				uniqueMessageTypes[messageType] = currMessageDBWrapper.Message.MessageType
 				config.Log.Debug(fmt.Sprintf("[Block: %v] [TX: %v] Found msg of type '%v'.", tx.TxResponse.Height, tx.TxResponse.TxHash, messageType))
 				messages = append(messages, currMessageDBWrapper)

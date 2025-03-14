@@ -145,6 +145,7 @@ func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]
 
 	// If result.Result is nil, it means the block doesn't exist in the EVM layer
 	if result.Result.Hash == "" {
+		log.Error().Msgf("block %d not found in EVM layer", height)
 		return []*db.EvmTransaction{}, nil
 	}
 
@@ -188,7 +189,7 @@ func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]
 			if err == nil {
 				tx.GasPrice = strconv.Itoa(int(decimalValue))
 			} else {
-				log.Err(err).Msgf("failed to convert value %s to decimal", decimalValue)
+				log.Err(err).Msgf("failed to convert value %d to decimal", decimalValue)
 			}
 		}
 
@@ -214,25 +215,28 @@ func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]
 			SetBody(receiptRequestBody).
 			Post(c.cl.EvmRestURl)
 
-		if err == nil {
-			var receiptResult struct {
-				Result struct {
-					Status string `json:"status"`
-				} `json:"result"`
-			}
+		if err != nil {
+			log.Err(err).Msg("failed to call EVM RPC eth_getTransactionReceipt")
+			continue
+		}
 
-			if err := json.Unmarshal(receiptResp.Body(), &receiptResult); err == nil {
-				status, err := strconv.ParseUint(strings.TrimPrefix(receiptResult.Result.Status, "0x"), 16, 64)
-				if err != nil {
-					log.Error().Err(err).Msgf("error parsing status %s", receiptResult.Result.Status)
-				}
-				if status == 1 {
-					status = 0
-				} else {
-					status = 1
-				}
-				tx.Status = status
+		var receiptResult struct {
+			Result struct {
+				Status string `json:"status"`
+			} `json:"result"`
+		}
+
+		if err := json.Unmarshal(receiptResp.Body(), &receiptResult); err == nil {
+			status, err := strconv.ParseUint(strings.TrimPrefix(receiptResult.Result.Status, "0x"), 16, 64)
+			if err != nil {
+				log.Error().Err(err).Msgf("error parsing status %s", receiptResult.Result.Status)
 			}
+			if status == 1 {
+				status = 0
+			} else {
+				status = 1
+			}
+			tx.Status = status
 		}
 
 		evmTxs = append(evmTxs, tx)
