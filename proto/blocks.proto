@@ -437,6 +437,7 @@ message GetVotesByAccountsRequest{
   Limit limit = 5;
   optional string account_addr = 6;
   optional SortBy sort = 7;
+  optional bool vote_unique = 8;
 }
 
 message GetVotesByAccountsResponse{
