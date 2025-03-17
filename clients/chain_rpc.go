@@ -173,7 +173,12 @@ func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]
 				log.Err(fmt.Errorf("failed to parse hex value")).
 					Msgf("invalid hex value %s", value)
 			}
-			tx.Value = bigValue.String()
+			if bigValue.Sign() < 0 {
+				log.Err(fmt.Errorf("negative value, ignoring")).Msgf("invalid hex value %s", value)
+				tx.Value = bigValue.String()
+			} else {
+				tx.Value = big.NewInt(0).String()
+			}
 		}
 
 		if data, ok := txData["input"].(string); ok {
