@@ -16,6 +16,8 @@ import (
 	"github.com/noders-team/cosmos-indexer/probe"
 	"github.com/noders-team/cosmos-indexer/probe/query"
 
+	"math/big"
+
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	types "github.com/cosmos/cosmos-sdk/types"
 	txTypes "github.com/cosmos/cosmos-sdk/types/tx"
@@ -166,12 +168,12 @@ func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]
 		}
 
 		if value, ok := txData["value"].(string); ok {
-			decimalValue, err := strconv.ParseInt(value, 0, 64)
-			if err == nil {
-				tx.Value = fmt.Sprintf("%d", decimalValue)
-			} else {
-				log.Err(err).Msgf("failed to convert value %s to decimal", value)
+			bigValue := big.NewInt(0)
+			if _, success := bigValue.SetString(strings.TrimPrefix(value, "0x"), 16); !success {
+				log.Err(fmt.Errorf("failed to parse hex value")).
+					Msgf("invalid hex value %s", value)
 			}
+			tx.Value = bigValue.String()
 		}
 
 		if data, ok := txData["input"].(string); ok {
@@ -180,17 +182,21 @@ func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]
 		}
 
 		if gas, ok := txData["gas"].(string); ok {
-			gasInt, _ := strconv.ParseUint(strings.TrimPrefix(gas, "0x"), 16, 64)
-			tx.Gas = gasInt
+			bigValue := big.NewInt(0)
+			if _, success := bigValue.SetString(strings.TrimPrefix(gas, "0x"), 16); !success {
+				log.Err(fmt.Errorf("failed to parse hex value gas")).
+					Msgf("invalid hex value %s", gas)
+			}
+			tx.Gas = bigValue.Uint64()
 		}
 
 		if gasPrice, ok := txData["gasPrice"].(string); ok {
-			decimalValue, err := strconv.ParseInt(gasPrice, 0, 64)
-			if err == nil {
-				tx.GasPrice = strconv.Itoa(int(decimalValue))
-			} else {
-				log.Err(err).Msgf("failed to convert value %d to decimal", decimalValue)
+			bigValue := big.NewInt(0)
+			if _, success := bigValue.SetString(strings.TrimPrefix(gasPrice, "0x"), 16); !success {
+				log.Err(fmt.Errorf("failed to parse hex value gasPrice")).
+					Msgf("invalid hex value %s", gasPrice)
 			}
+			tx.GasPrice = bigValue.String()
 		}
 
 		if nonce, ok := txData["nonce"].(string); ok {
