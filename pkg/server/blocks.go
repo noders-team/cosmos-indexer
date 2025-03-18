@@ -497,12 +497,15 @@ func (r *blocksServer) ChartTransactionsVolume(ctx context.Context, in *pb.Chart
 }
 
 func (r *blocksServer) BlockUpTime(ctx context.Context, in *pb.BlockUpTimeRequest) (*pb.BlockUpTimeResponse, error) {
-	upTime, err := r.srv.BlockUptime(ctx, in.BlockWindow, in.BlockHeight, in.ValidatorAddress)
-	if err != nil {
-		return &pb.BlockUpTimeResponse{}, err
-	}
+	// TODO
+	/*
+		upTime, err := r.srv.BlockUptime(ctx, in.BlockWindow, in.BlockHeight, in.ValidatorAddress)
+		if err != nil {
+			return &pb.BlockUpTimeResponse{}, err
+		}
 
-	return &pb.BlockUpTimeResponse{Uptime: decimal.NewFromFloat32(upTime).String()}, nil
+		return &pb.BlockUpTimeResponse{Uptime: decimal.NewFromFloat32(upTime).String()}, nil*/
+	return &pb.BlockUpTimeResponse{}, errors.New("not implemented")
 }
 
 func (r *blocksServer) UptimeByBlocks(ctx context.Context, in *pb.UptimeByBlocksRequest) (*pb.UptimeByBlocksResponse, error) {
