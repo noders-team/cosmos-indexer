@@ -75,8 +75,9 @@ func TestDecodingTxsNil(t *testing.T) {
 		nil, cl, nil, chainRpcClient)
 
 	blData := blockWorker.FetchBlock(rpcClient, &core.EnqueueData{
-		Height:            9568000,
-		IndexTransactions: true,
+		Height:               9568000,
+		IndexTransactions:    true,
+		IndexEVMTransactions: false,
 	})
 	require.NotNil(t, blData)
 	require.Len(t, blData.BlockResultsData.TxResults, 3)

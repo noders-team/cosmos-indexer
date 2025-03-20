@@ -57,12 +57,21 @@ func ProcessBlock(blockData *ctypes.ResultBlock, blockResultsData *ctypes.Result
 			continue
 		}
 
+		sigTime := bl.Timestamp
+		if sigTime.IsZero() {
+			sigTime = blockData.Block.Time
+		}
+
 		signatures = append(signatures, models.BlockSignature{
 			ValidatorAddress: address.String(),
 			Signature:        bl.Signature,
-			Timestamp:        bl.Timestamp,
+			Timestamp:        sigTime,
 		})
 	}
+	if len(signatures) == 0 {
+		log.Warn().Msgf("No signatures found for block %d", blockData.Block.Height)
+	}
+
 	block.Signatures = signatures
 
 	return block, nil
