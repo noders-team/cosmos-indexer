@@ -39,7 +39,11 @@ func NewBlocks(db *pgxpool.Pool) Blocks {
 }
 
 func (r *blocks) BlockUptime(ctx context.Context, blockWindow, height int64, validatorAddr string) (float32, error) {
-	query := `select count(b.height)
+	if blockWindow == 0 {
+		return 0, fmt.Errorf("blockWindow must be greater than 0")
+	}
+
+	query := `select COALESCE(count(b.height), 0)
 				from block_signatures bs 
     			left join public.blocks b on b.id = bs.block_id
     			where b.height between $1 and $2

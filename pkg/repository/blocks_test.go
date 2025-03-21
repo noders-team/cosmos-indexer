@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -360,6 +361,20 @@ VALUES
 			"val_addr3",
 			expected{upTime: 20.00},
 		},
+		{
+			"0 window",
+			1010,
+			0,
+			"val_addr3",
+			expected{err: errors.New("blockWindow must be greater than 0")},
+		},
+		{
+			"no validator",
+			1010,
+			100,
+			"val_addr7777",
+			expected{upTime: 0.00},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -369,7 +384,9 @@ VALUES
 				require.Fail(t, "expected error, got nil")
 			}
 			require.Equal(t, tt.result.err, err)
-			require.Equal(t, tt.result.upTime, res)
+			if err == nil {
+				require.Equal(t, tt.result.upTime, res)
+			}
 		})
 	}
 }
