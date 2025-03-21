@@ -32,7 +32,7 @@ func TestDecoding(t *testing.T) {
 	blockWorker := core.NewBlockRPCWorker("id",
 		nil, cl, nil, chainRpcClient)
 
-	blData := blockWorker.FetchBlock(rpcClient, &core.EnqueueData{
+	blData := blockWorker.FetchBlock(&core.EnqueueData{
 		Height:            2494206,
 		IndexTransactions: true,
 	})
@@ -49,7 +49,7 @@ func TestDecoding(t *testing.T) {
 	require.NotNil(t, data)
 
 	txParser := tx.NewParser(nil, probeCl, tx.NewProcessor(probeCl))
-	txDBWrappers, _, err := txParser.ProcessRPCTXs(make([]filter.MessageTypeFilter, 0), blData.GetTxsResponse)
+	txDBWrappers, err := txParser.ProcessRPCTXs(make([]filter.MessageTypeFilter, 0), blData.GetTxsResponse)
 	require.Len(t, txDBWrappers, 1)
 }
 
@@ -61,10 +61,7 @@ func TestDecodingTxsNil(t *testing.T) {
 		RPC:           "https://nillion-testnet.rpc.kjnodes.com:443",
 	}
 	cl := probe.GetProbeClient(probeCfg)
-	rpcClient := rpc.URIClient{
-		Address: cl.Config.RPCAddr,
-		Client:  &http.Client{},
-	}
+
 	chainRpcClient := clients.NewChainRPC(cl)
 
 	chainCatchingUp, err := chainRpcClient.IsCatchingUp()
@@ -74,7 +71,7 @@ func TestDecodingTxsNil(t *testing.T) {
 	blockWorker := core.NewBlockRPCWorker(probeCfg.ChainID,
 		nil, cl, nil, chainRpcClient)
 
-	blData := blockWorker.FetchBlock(rpcClient, &core.EnqueueData{
+	blData := blockWorker.FetchBlock(&core.EnqueueData{
 		Height:               9568000,
 		IndexTransactions:    true,
 		IndexEVMTransactions: false,
@@ -92,7 +89,7 @@ func TestDecodingTxsNil(t *testing.T) {
 	require.NotNil(t, data)
 
 	txParser := tx.NewParser(nil, probeCl, tx.NewProcessor(probeCl))
-	txDBWrappers, _, err := txParser.ProcessRPCBlockByHeightTXs(make([]filter.MessageTypeFilter, 0), blData.BlockData, blData.BlockResultsData)
+	txDBWrappers, err := txParser.ProcessRPCBlockByHeightTXs(make([]filter.MessageTypeFilter, 0), blData.BlockData, blData.BlockResultsData)
 	require.Len(t, txDBWrappers, 3)
 }
 
@@ -104,10 +101,7 @@ func TestDecodingTxsBera(t *testing.T) {
 		RPC:           "http://168.119.208.253:26657",
 	}
 	cl := probe.GetProbeClient(probeCfg)
-	rpcClient := rpc.URIClient{
-		Address: cl.Config.RPCAddr,
-		Client:  &http.Client{},
-	}
+
 	chainRpcClient := clients.NewChainRPC(cl)
 
 	chainCatchingUp, err := chainRpcClient.IsCatchingUp()
@@ -117,7 +111,7 @@ func TestDecodingTxsBera(t *testing.T) {
 	blockWorker := core.NewBlockRPCWorker(probeCfg.ChainID,
 		nil, cl, nil, chainRpcClient)
 
-	blData := blockWorker.FetchBlock(rpcClient, &core.EnqueueData{
+	blData := blockWorker.FetchBlock(&core.EnqueueData{
 		Height:            1326580,
 		IndexTransactions: true,
 	})
@@ -135,6 +129,6 @@ func TestDecodingTxsBera(t *testing.T) {
 	require.NotNil(t, data)
 
 	txParser := tx.NewParser(nil, probeCl, tx.NewProcessor(probeCl))
-	txDBWrappers, _, err := txParser.ProcessRPCBlockByHeightTXs(make([]filter.MessageTypeFilter, 0), blData.BlockData, blData.BlockResultsData)
+	txDBWrappers, err := txParser.ProcessRPCBlockByHeightTXs(make([]filter.MessageTypeFilter, 0), blData.BlockData, blData.BlockResultsData)
 	require.Len(t, txDBWrappers, 3)
 }

@@ -1,13 +1,14 @@
 package tx
 
 import (
-	banktypes "cosmossdk.io/x/bank/types"
 	"encoding/hex"
 	"fmt"
 	"reflect"
 	"strings"
 	"time"
 	"unsafe"
+
+	banktypes "cosmossdk.io/x/bank/types"
 
 	"cosmossdk.io/math"
 	"github.com/noders-team/cosmos-indexer/probe"
@@ -527,8 +528,6 @@ func tendermintHashToHex(hash []byte) string {
 // TODO: Remove this map and replace with a more generic solution
 var messageTypeHandler = map[string][]func() txtypes.CosmosMessage{}
 
-// var messageTypeIgnorer = map[string]interface{}{}
-
 // Merge the chain specific message type handlers into the core message type handler map.
 // Chain specific handlers will be registered BEFORE any generic handlers.
 // TODO: Remove this function and replace with a more generic solution
@@ -549,6 +548,11 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 		return nil, nil
 	}
 	currTxDbWrappers := make([]dbTypes.TxDBWrapper, len(data.EvmTransactions))
+
+	log.Info().
+		Int64("blockHeight", data.BlockData.Block.Height).
+		Int("transactionCount", len(data.EvmTransactions)).
+		Msg("Processing EVM transactions")
 
 	for txIdx := range data.EvmTransactions {
 		var indexerMergedTx txtypes.MergedTx
@@ -668,9 +672,37 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 				Amount:      coins,
 			}
 			currMessages = append(currMessages, &msg)
-		} else {
-			log.Err(err).Msgf("error parsing value %s", currTxResp.Value)
+
+			log.Debug().
+				Str("txHash", currTxResp.Hash).
+				Str("from", currTxResp.From).
+				Str("to", currTxResp.To).
+				Str("value", currTxResp.Value).
+				Msg("Adding native token transfer message")
 		}
+
+		if currTxResp.TokenTransfer != nil {
+			tokenDec, err := decimal.NewFromString(currTxResp.TokenTransfer.Amount)
+			if err == nil {
+				coins := []types.Coin{types.NewCoin("eth", math.NewInt(tokenDec.IntPart()))}
+				msg := banktypes.MsgSend{
+					FromAddress: currTxResp.TokenTransfer.Address,
+					ToAddress:   currTxResp.TokenTransfer.Receiver,
+					Amount:      coins,
+				}
+				currMessages = append(currMessages, &msg)
+
+				log.Info().
+					Str("txHash", currTxResp.Hash).
+					Str("from", currTxResp.From).
+					Str("tokenAmount", tokenDec.String()).
+					Str("tokenAddress", currTxResp.TokenTransfer.Address).
+					Msg("Added ERC-20 token transfer message")
+			} else {
+				log.Err(err).Msgf("Failed to add token transfer message %s", tokenDec)
+			}
+		}
+
 		indexerMergedTx.Tx.Body.Messages = currMessages
 
 		var messages []dbTypes.MessageDBWrapper
@@ -721,6 +753,11 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 
 		currTxDbWrappers[txIdx] = processedTx
 	}
+
+	log.Info().
+		Int64("blockHeight", data.BlockData.Block.Height).
+		Int("totalTxs", len(data.EvmTransactions)).
+		Msg("Finished processing EVM transactions with message creation")
 
 	return currTxDbWrappers, nil
 }

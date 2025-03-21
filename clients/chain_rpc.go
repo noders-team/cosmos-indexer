@@ -95,6 +95,128 @@ func (c *chainRPC) GetTxsByBlockHeight(height int64) (*txTypes.GetTxsEventRespon
 	}, nil
 }
 
+// IERC20 transfer method ID (first 4 bytes of keccak256("transfer(address,uint256)"))
+const ERC20TransferMethodID = "a9059cbb"
+
+// ERC20 Transfer event signature (keccak256("Transfer(address,address,uint256)"))
+const ERC20TransferEventTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+
+func ParseERC20TransferData(data []byte) (string, *big.Int, bool) {
+	if len(data) < 68 {
+		log.Debug().Msgf("ERC20: Input data too short (%d bytes) for ERC-20 transfer", len(data))
+		return "", nil, false
+	}
+
+	methodID := hex.EncodeToString(data[:4])
+	if methodID != strings.TrimPrefix(ERC20TransferMethodID, "0x") {
+		log.Debug().Msgf("ERC20: Method ID %s is not ERC-20 transfer method (%s)", methodID, ERC20TransferMethodID)
+		return "", nil, false
+	}
+
+	log.Debug().Msgf("ERC20: Found transfer method signature (%s)", methodID)
+	recipientBytes := data[4:36]
+	ethAddress := recipientBytes[12:32]
+	recipientAddr := "0x" + hex.EncodeToString(ethAddress)
+	
+	amountBytes := data[36:68]
+	amount := big.NewInt(0)
+	amount.SetBytes(amountBytes)
+
+	log.Info().
+		Str("recipient", recipientAddr).
+		Str("amount", amount.String()).
+		Msg("ERC20: Successfully parsed transfer data")
+
+	return recipientAddr, amount, true
+}
+
+// ExtractERC20TransferFromLogs checks transaction logs for ERC-20 Transfer events
+// Returns token contract address, recipient, amount, and whether it found a valid Transfer event
+func ExtractERC20TransferFromLogs(logs []interface{}) (string, string, *big.Int, bool) {
+	log.Debug().Msgf("ERC20: Scanning %d logs for Transfer events", len(logs))
+
+	for i, logEntry := range logs {
+		logMap, ok := logEntry.(map[string]interface{})
+		if !ok {
+			log.Debug().Msgf("ERC20: Log entry #%d is not a map, skipping", i)
+			continue
+		}
+
+		topics, ok := logMap["topics"].([]interface{})
+		if !ok || len(topics) < 3 {
+			log.Debug().Msgf("ERC20: Log entry #%d has invalid topics (need at least 3)", i)
+			continue
+		}
+
+		eventSig, ok := topics[0].(string)
+		if !ok {
+			log.Debug().Msgf("ERC20: Log entry #%d has invalid event signature", i)
+			continue
+		}
+
+		eventSigTrimmed := strings.TrimPrefix(eventSig, "0x")
+		if eventSigTrimmed != strings.TrimPrefix(ERC20TransferEventTopic, "0x") {
+			log.Debug().Msgf("ERC20: Log entry #%d has non-transfer event signature: %s", i, eventSig)
+			continue
+		}
+
+		log.Debug().Str("event", eventSig).Msgf("ERC20: Found Transfer event in log #%d", i)
+
+		tokenAddress, ok := logMap["address"].(string)
+		if !ok {
+			log.Debug().Msgf("ERC20: Missing contract address in log #%d", i)
+			continue
+		}
+
+		fromTopic, _ := topics[1].(string)
+		log.Debug().Str("from_topic", fromTopic).Msg("ERC20: From address in Transfer event")
+
+		toAddrHex, ok := topics[2].(string)
+		if !ok {
+			log.Debug().Msgf("ERC20: Missing recipient in log #%d", i)
+			continue
+		}
+
+		toAddrHex = strings.TrimPrefix(toAddrHex, "0x")
+
+		if len(toAddrHex) >= 64 {
+			toAddrHex = toAddrHex[len(toAddrHex)-40:]
+		} else if len(toAddrHex) < 40 {
+			for len(toAddrHex) < 40 {
+				toAddrHex = "0" + toAddrHex
+			}
+		}
+
+		toAddr := "0x" + toAddrHex
+
+		data, ok := logMap["data"].(string)
+		if !ok {
+			log.Debug().Msgf("ERC20: Missing data field in log #%d", i)
+			continue
+		}
+
+		dataBytes, err := hex.DecodeString(strings.TrimPrefix(data, "0x"))
+		if err != nil || len(dataBytes) < 32 {
+			log.Debug().Err(err).Msgf("ERC20: Invalid data in log #%d: %s", i, data)
+			continue
+		}
+
+		amount := big.NewInt(0)
+		amount.SetBytes(dataBytes)
+
+		log.Info().
+			Str("token", tokenAddress).
+			Str("recipient", toAddr).
+			Str("amount", amount.String()).
+			Msg("ERC20: Successfully extracted transfer from logs")
+
+		return tokenAddress, toAddr, amount, true
+	}
+
+	log.Debug().Msg("ERC20: No valid Transfer events found in logs")
+	return "", "", nil, false
+}
+
 // GetEvmTxsByBlockHeight retrieves EVM transactions for a specific block height from the Berachain EVM RPC endpoint.
 // This function requires a properly configured EVM RPC endpoint (cl.EvmRestURl) that supports the Ethereum JSON-RPC API.
 // For Berachain, use a reliable RPC endpoint like "https://berachain-testnet-rpc.publicnode.com".
@@ -154,7 +276,7 @@ func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]
 	blockHash := result.Result.Hash
 
 	evmTxs := make([]*db.EvmTransaction, 0, len(result.Result.Transactions))
-	for _, txData := range result.Result.Transactions {
+	for txIndex, txData := range result.Result.Transactions {
 		tx := &db.EvmTransaction{
 			Hash:        txData["hash"].(string),
 			From:        txData["from"].(string),
@@ -233,7 +355,8 @@ func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]
 
 		var receiptResult struct {
 			Result struct {
-				Status string `json:"status"`
+				Status string        `json:"status"`
+				Logs   []interface{} `json:"logs"`
 			} `json:"result"`
 		}
 
@@ -248,10 +371,38 @@ func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]
 				status = 1
 			}
 			tx.Status = status
+
+			if tx.Value == "0" && tx.TokenTransfer == nil && len(receiptResult.Result.Logs) > 0 {
+				log.Debug().
+					Str("txHash", tx.Hash).
+					Int("logsCount", len(receiptResult.Result.Logs)).
+					Msg("Checking transaction logs for ERC-20 transfers")
+
+				tokenAddr, recipient, amount, found := ExtractERC20TransferFromLogs(receiptResult.Result.Logs)
+				if found && amount != nil {
+					log.Info().
+						Str("txHash", tx.Hash).
+						Str("tokenContract", tokenAddr).
+						Str("recipient", recipient).
+						Str("amount", amount.String()).
+						Msg("ERC20: Detected transfer from transaction logs")
+
+					tx.TokenTransfer = &db.EvmTokenTransfer{
+						Address:  tokenAddr,
+						Receiver: recipient,
+						Amount:   amount.String(),
+					}
+				}
+			}
 		}
 
 		evmTxs = append(evmTxs, tx)
 	}
+
+	log.Info().
+		Int64("blockHeight", height).
+		Int("totalTxs", len(evmTxs)).
+		Msg("Finished processing EVM transactions in block")
 
 	return evmTxs, nil
 }
