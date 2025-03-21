@@ -117,7 +117,7 @@ func ParseERC20TransferData(data []byte) (string, *big.Int, bool) {
 	recipientBytes := data[4:36]
 	ethAddress := recipientBytes[12:32]
 	recipientAddr := "0x" + hex.EncodeToString(ethAddress)
-	
+
 	amountBytes := data[36:68]
 	amount := big.NewInt(0)
 	amount.SetBytes(amountBytes)
@@ -276,7 +276,7 @@ func (c *chainRPC) GetEvmTxsByBlockHeight(height int64, blockTime time.Time) ([]
 	blockHash := result.Result.Hash
 
 	evmTxs := make([]*db.EvmTransaction, 0, len(result.Result.Transactions))
-	for txIndex, txData := range result.Result.Transactions {
+	for _, txData := range result.Result.Transactions {
 		tx := &db.EvmTransaction{
 			Hash:        txData["hash"].(string),
 			From:        txData["from"].(string),
