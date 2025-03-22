@@ -683,7 +683,7 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 
 		if currTxResp.TokenTransfer != nil {
 			tokenDec, err := decimal.NewFromString(currTxResp.TokenTransfer.Amount)
-			if err == nil {
+			if err == nil && tokenDec.IntPart() > 0 {
 				coins := []types.Coin{types.NewCoin("eth", math.NewInt(tokenDec.IntPart()))}
 				msg := banktypes.MsgSend{
 					FromAddress: currTxResp.TokenTransfer.Address,
