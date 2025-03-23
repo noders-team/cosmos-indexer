@@ -18,6 +18,7 @@ on:
           - story-prod
           - berachain-prod
           - nillion-prod
+          - asi
 
           # testnet
           - 0g-testnet-prod
@@ -147,7 +148,7 @@ jobs:
                 --probe.account-prefix=${{ vars.PROBE_ACCOUNT_PREFIX }} \
                 --probe.chain-id=${{ vars.PROBE_CHAIN_ID }} \
                 --probe.chain-name=${{ vars.PROBE_CHAIN_NAME }} \
-                --database.host=${{ vars.POSTGRES_HOST || 'postgres' }} \
+                --database.host=${{ vars.POSTGRES_HOST || 'postgres-indexer' }} \
                 --database.database=${{ vars.POSTGRES_DATABASE || 'indexer' }} \
                 --database.user=${{ secrets.POSTGRES_USER }} \
                 --database.password=${{ secrets.POSTGRES_PASSWORD }} \

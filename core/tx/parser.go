@@ -48,10 +48,6 @@ func NewParser(db *gorm.DB, cl *probe.ChainClient, processor Processor) Parser {
 func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageTypeFilter,
 	blockResults *coretypes.ResultBlock, resultBlockRes *coretypes.ResultBlockResults,
 ) ([]dbTypes.TxDBWrapper, error) {
-	if len(blockResults.Block.Txs) != len(resultBlockRes.TxResults) {
-		config.Log.Fatalf("blockResults & resultBlockRes: different length %d != %d", len(blockResults.Block.Txs), len(resultBlockRes.TxResults))
-	}
-
 	blockTime := &blockResults.Block.Time
 	blockTimeStr := blockTime.Format(time.RFC3339)
 	currTxDbWrappers := make([]dbTypes.TxDBWrapper, len(blockResults.Block.Txs))

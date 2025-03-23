@@ -17,9 +17,10 @@ log.txt
 postgres-data
 mongodb-data
 build
+.cursor/*
 .cursorrules
-.cursor
-RULESFORAI.md
-@lessons-learned.md
+.cursorignore/*
 @memories.md
 @scratchpad.md
+RULESFORAI.md
+@lessons-learned.md
