@@ -2,6 +2,7 @@ package tx
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
