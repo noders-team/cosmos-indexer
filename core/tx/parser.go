@@ -47,7 +47,8 @@ func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageT
 	blockResults *coretypes.ResultBlock, resultBlockRes *coretypes.ResultBlockResults,
 ) ([]dbTypes.TxDBWrapper, *time.Time, error) {
 	if len(blockResults.Block.Txs) != len(resultBlockRes.TxsResults) {
-		config.Log.Fatalf("blockResults & resultBlockRes: different length")
+		log.Error().Msgf("blockResults & resultBlockRes: different length %d != %d", len(blockResults.Block.Txs), len(resultBlockRes.TxsResults))
+		return nil, nil, errors.New("blockResults & resultBlockRes: different length")
 	}
 
 	blockTime := &blockResults.Block.Time
