@@ -95,35 +95,166 @@ jobs:
       
       - name: Create Deployment Summary
         run: |
-          # Get repository and owner from GITHUB_REPOSITORY
-          REPO_OWNER=$(echo "$GITHUB_REPOSITORY" | cut -d '/' -f 1)
-          REPO_NAME=$(echo "$GITHUB_REPOSITORY" | cut -d '/' -f 2)
-          
-          # Create direct URL to deployment workflow with prefilled values
-          DEPLOY_URL="https://github.com/$GITHUB_REPOSITORY/actions/workflows/deploy.yaml?query=workflow%3A%22Deploy+Indexer+-+PROD%22"
-          
           echo "## ✅ Image build completed" >> $GITHUB_STEP_SUMMARY
           echo -e "**Image tag:**\n\`\`\`\n${{ steps.build.outputs.IMAGE_TAG }}\n\`\`\`" >> $GITHUB_STEP_SUMMARY
           
           if [ "${{ github.event.inputs.deploy_after_build }}" == "true" ]; then
             echo "Image will be automatically deployed to ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
           else
-            echo "To deploy this image, you can:" >> $GITHUB_STEP_SUMMARY
-            echo "1. **[Deploy this image now](${DEPLOY_URL})**" >> $GITHUB_STEP_SUMMARY
-            echo "   - Click the 'Run workflow' button" >> $GITHUB_STEP_SUMMARY
-            echo "   - Image tag: \`${{ steps.build.outputs.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "   - Environment: \`${{ github.event.inputs.environment }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "2. Or run this workflow again with the 'Deploy this image after building' option checked" >> $GITHUB_STEP_SUMMARY
-            echo "   - Use the same branch and environment" >> $GITHUB_STEP_SUMMARY
-            echo "   - Enter '${{ steps.build.outputs.IMAGE_TAG }}' as the tag name" >> $GITHUB_STEP_SUMMARY
+            echo "A deployment job has been queued and is waiting for your approval." >> $GITHUB_STEP_SUMMARY
+            echo "- To deploy with **default settings**, approve the deployment when prompted." >> $GITHUB_STEP_SUMMARY
+            echo "- To deploy with **custom settings** (throttling, workers, etc.), check the issue created for deployment options." >> $GITHUB_STEP_SUMMARY
           fi
 
   deploy:
     needs: build
-    if: ${{ github.event.inputs.deploy_after_build == 'true' }}
-    uses: ./.github/workflows/deploy.yaml
-    with:
-      image_tag: ${{ needs.build.outputs.IMAGE_TAG }}
-      environment: ${{ github.event.inputs.environment }}
-    secrets: inherit
+    if: always()
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'celestia-prod' }}
+    steps:
+      - name: Check if automatic deployment was requested
+        id: check_deploy
+        run: |
+          if [ "${{ github.event.inputs.deploy_after_build }}" == "true" ]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create deployment options form
+        if: steps.check_deploy.outputs.should_deploy != 'true'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const imageTag = '${{ needs.build.outputs.IMAGE_TAG }}';
+            const environment = '${{ github.event.inputs.environment || "celestia-prod" }}';
+            
+            const form = `
+            # Deploy Image Options
+            
+            **Image tag:** \`${imageTag}\`
+            **Environment:** \`${environment}\`
+            
+            ## Select options to deploy with:
+            
+            <details>
+            <summary>Click to expand deployment options</summary>
+            
+            To deploy with custom options, start a new "Deploy Indexer - PROD" workflow and set:
+            - Image tag: \`${imageTag}\`
+            - Environment: Select from dropdown
+            - Any other options you need to customize
+            
+            [Start Deploy Workflow](https://github.com/${{ github.repository }}/actions/workflows/deploy.yaml)
+            </details>
+            
+            Or to deploy with the default options for \`${environment}\`, approve below:
+            `;
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Deploy image ${imageTag} to ${environment}`,
+              body: form,
+              labels: ['deployment']
+            });
+            
+            console.log('Created deployment options form as an issue');
+
+      - name: Wait for deployment approval
+        if: steps.check_deploy.outputs.should_deploy != 'true'
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ github.TOKEN }}
+          approvers: ${{ github.actor }}
+          minimum-approvals: 1
+          issue-title: "Deploy image ${{ needs.build.outputs.IMAGE_TAG }} with default options"
+          issue-body: "Approve to deploy image `${{ needs.build.outputs.IMAGE_TAG }}` to environment `${{ github.event.inputs.environment || 'celestia-prod' }}` with the default configuration.\n\nIf you need to customize deployment options, cancel this and use the deployment form issue."
+          exclude-workflow-initiator-as-approver: false
+          timeout-minutes: 60
+
+      - name: Deploy to remote server
+        if: steps.check_deploy.outputs.should_deploy == 'true' || success()
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          port: ${{ secrets.PORT }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.KEY }}
+          script: |
+            # Docker Login on the remote server
+            echo ${{ secrets.GITHUB_TOKEN }} | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Check if the Redis container is running, and start it if not
+            if [ $(sudo docker ps -a --filter "name=^redis$" --format "{{.Names}}" | wc -l) -eq 0 ]; then
+              echo "client-output-buffer-limit pubsub 20480mb 20480mb 60" > redis.conf
+              sudo docker run -d --name redis \
+                --restart unless-stopped \
+                -p 127.0.0.1:6379:6379 \
+                --network indexer_network \
+                -v ./redis.conf:/usr/local/etc/redis/redis.conf \
+                redis redis-server /usr/local/etc/redis/redis.conf
+            else
+              echo "Redis container is already running."
+            fi
+
+            # Check if the MongoDB container is running, and start it if not
+            if [ $(sudo docker ps -a --filter "name=^mongo$" --format "{{.Names}}" | wc -l) -eq 0 ]; then
+              sudo docker run -d --name mongo \
+                --restart unless-stopped \
+                --shm-size=1g \
+                -e MONGO_INITDB_DATABASE=mongo \
+                -e MONGO_INITDB_ROOT_USERNAME=${{ secrets.MONGO_USER }} \
+                -e MONGO_INITDB_ROOT_PASSWORD=${{ secrets.MONGO_PASSWORD }} \
+                -v mongo_indexer:/data/db \
+                -p 127.0.0.1:27017:27017 \
+                --network indexer_network \
+                mongo:5.0.2
+            else
+              echo "MongoDB container is already running."
+            fi
+
+            # Check if the cosmos-indexer container is running, and remove it if it exists
+            if [ $(sudo docker ps -a --filter "name=^cosmos-indexer$" --format "{{.Names}}" | wc -l) -ne 0 ]; then
+              sudo docker rm -f cosmos-indexer
+              echo "Cosmos-indexer container removed."
+            fi
+
+            # Pull the specified cosmos-indexer image
+            sudo docker pull ghcr.io/${{ github.repository }}/cosmos-indexer:${{ needs.build.outputs.IMAGE_TAG }}
+
+            # Start a new cosmos-indexer container with environment variables
+            sudo docker run -d --name cosmos-indexer \
+              -p 127.0.0.1:9012:9012 \
+              -p 127.0.0.1:9002:9002 \
+              --restart unless-stopped \
+              --network indexer_network \
+              ghcr.io/${{ github.repository }}/cosmos-indexer:${{ needs.build.outputs.IMAGE_TAG }} \
+              /bin/sh -c "cosmos-indexer index \
+                --log.pretty=true \
+                --log.level=info \
+                --base.start-block=${{ vars.BASE_START_BLOCK }} \
+                --base.end-block=${{ vars.BASE_END_BLOCK || -1 }} \
+                --base.throttling=${{ vars.BASE_THROTTLING || 0.105 }} \
+                --base.rpc-workers=${{ vars.BASE_RPC_WORKERS || 3 }} \
+                --base.index-transactions=${{ vars.BASE_INDEX_TRANSACTIONS || true }} \
+                --base.reindex=${{ vars.BASE_REINDEX || false }} \
+                --probe.rpc=${{ vars.PROBE_RPC || '' }} \
+                --probe.account-prefix=${{ vars.PROBE_ACCOUNT_PREFIX }} \
+                --probe.chain-id=${{ vars.PROBE_CHAIN_ID }} \
+                --probe.chain-name=${{ vars.PROBE_CHAIN_NAME }} \
+                --database.host=${{ vars.POSTGRES_HOST || 'postgres-indexer' }} \
+                --database.database=${{ vars.POSTGRES_DATABASE || 'indexer' }} \
+                --database.user=${{ secrets.POSTGRES_USER }} \
+                --database.password=${{ secrets.POSTGRES_PASSWORD }} \
+                --server.port=9002 \
+                --redis.addr=redis:6379 \
+                --mongo.addr=mongodb://${{ secrets.MONGO_USER }}:${{ secrets.MONGO_PASSWORD }}@mongo:27017 \
+                --mongo.db=mongo"
+
+            # Restart cosmos-explorer container
+            sudo docker restart cosmos-explorer
+
+            # Clean up unused Docker resources
+            sudo docker system prune -f
