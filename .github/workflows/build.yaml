@@ -1,0 +1,96 @@
+name: Build Indexer
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build from (not needed when triggered by tag push)'
+        required: false
+        default: 'main'
+      tag:
+        description: 'Tag name for the Docker image (optional)'
+        required: false
+      environment:
+        description: 'Environment to tag with (when not using custom tag)'
+        required: false
+        default: 'celestia-prod'
+        type: choice
+        options:
+          # mainnet
+          - celestia-prod
+          - story-prod
+          - berachain-prod
+          - nillion-prod
+          - asi
+
+          # testnet
+          - 0g-testnet-prod
+          - nillion-testnet-prod
+          - story-testnet-prod
+          - babylon-testnet-prod
+
+          # dev
+          - celestia-dev
+  push:
+    tags:
+      - '*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest-minimal
+    environment: ${{ github.event.inputs.environment || 'celestia-prod' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+          fetch-depth: 0
+
+      - name: Docker Login
+        run: |
+          echo ${{ secrets.GITHUB_TOKEN }} | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Choose go.mod file
+        run: |
+          GO_MOD_FILE=${{ vars.GO_MOD_FILE || 'go.mod.or' }}
+          if [ "$GO_MOD_FILE" != "go.mod" ]; then
+            mv $GO_MOD_FILE go.mod
+          fi
+
+      - name: Run go mod tidy
+        run: |
+          go mod tidy
+          if [[ "${{ vars.BASE_INDEX_EVM_TRANSACTIONS }}" != "true" ]]; then
+            go mod vendor
+          fi
+
+      - name: Build Docker Image
+        id: build
+        run: |
+          if [ "${{ github.event_name }}" == "push" ]; then
+            IMAGE_TAG=$(echo ${{ github.ref }} | sed 's|refs/tags/||')
+            echo "Using tag from Git: ${IMAGE_TAG}"
+          elif [ -n "${{ github.event.inputs.tag }}" ]; then
+            IMAGE_TAG="${{ github.event.inputs.tag }}"
+            echo "Using provided tag: ${IMAGE_TAG}"
+          else
+            BRANCH_NAME=$(echo "${{ github.event.inputs.branch }}" | tr '/' '-')
+            IMAGE_TAG="${BRANCH_NAME}-${{ github.event.inputs.environment }}"
+            echo "Using branch-environment tag: ${IMAGE_TAG}"
+          fi
+          sudo docker build -t ghcr.io/${{ github.repository }}/cosmos-indexer:${IMAGE_TAG} --build-arg TARGETPLATFORM=linux/amd64 .
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Push Docker Image
+        run: |
+          sudo docker push ghcr.io/${{ github.repository }}/cosmos-indexer:${{ steps.build.outputs.IMAGE_TAG }}
+      
+      - name: Create Deployment Summary
+        run: |
+          echo "## ✅ Image build completed" >> $GITHUB_STEP_SUMMARY
+          echo "Image tag: \`${{ steps.build.outputs.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "To deploy this image, you need to manually trigger the deployment workflow:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to the Actions tab" >> $GITHUB_STEP_SUMMARY
+          echo "2. Select 'Deploy Indexer Image'" >> $GITHUB_STEP_SUMMARY
+          echo "3. Use the tag: \`${{ steps.build.outputs.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY

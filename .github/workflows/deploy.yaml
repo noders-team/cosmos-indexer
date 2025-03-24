@@ -1,19 +1,17 @@
-name: Deploy Indexer - PROD
+name: Deploy Indexer Image
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - '*'
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        environment:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to deploy'
+        required: true
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'celestia-prod'
+        type: choice
+        options:
           # mainnet
           - celestia-prod
           - story-prod
@@ -30,62 +28,10 @@ jobs:
           # dev
           - celestia-dev
 
-    environment: ${{ matrix.environment }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
-
-      - name: Docker Login
-        run: |
-          echo ${{ secrets.GITHUB_TOKEN }} | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-      - name: Choose go.mod file
-        run: |
-          GO_MOD_FILE=${{ vars.GO_MOD_FILE || 'go.mod.or' }}
-          if [ "$GO_MOD_FILE" != "go.mod" ]; then
-            mv $GO_MOD_FILE go.mod
-          fi
-
-      - name: Run go mod tidy
-        run: |
-          go mod tidy
-          if [[ "${{ vars.BASE_INDEX_EVM_TRANSACTIONS }}" != "true" ]]; then
-            go mod vendor
-          fi
-
-      - name: Build Docker Image
-        run: sudo docker build -t ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }} --build-arg TARGETPLATFORM=linux/amd64 .
-
-      - name: Push Docker Image
-        run: sudo docker push ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }}
-
+jobs:
   deploy:
-    needs: build
-    runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        environment:
-          # mainnet
-          - celestia-prod
-          - story-prod
-          - berachain-prod
-          - nillion-prod
-
-          # testnet
-          - 0g-testnet-prod
-          - nillion-testnet-prod
-          - story-testnet-prod
-          - babylon-testnet-prod
-
-          # dev
-          - celestia-dev
-
-    environment: ${{ matrix.environment }}
+    runs-on: ubuntu-latest-minimal
+    environment: ${{ github.event.inputs.environment }}
 
     steps:
       - name: Deploy to remote server
@@ -133,9 +79,9 @@ jobs:
               sudo docker rm -f cosmos-indexer
               echo "Cosmos-indexer container removed."
             fi
-            
-            # Pull the latest cosmos-indexer image
-            sudo docker pull ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }}
+
+            # Pull the specified cosmos-indexer image
+            sudo docker pull ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.event.inputs.image_tag }}
 
             # Start a new cosmos-indexer container with environment variables
             sudo docker run -d --name cosmos-indexer \
@@ -143,7 +89,7 @@ jobs:
               -p 127.0.0.1:9002:9002 \
               --restart unless-stopped \
               --network indexer_network \
-              ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.ref_name }}-${{ matrix.environment }} \
+              ghcr.io/${{ github.repository }}/cosmos-indexer:${{ github.event.inputs.image_tag }} \
               /bin/sh -c "cosmos-indexer index \
                 --log.pretty=true \
                 --log.level=info \
@@ -165,9 +111,9 @@ jobs:
                 --redis.addr=redis:6379 \
                 --mongo.addr=mongodb://${{ secrets.MONGO_USER }}:${{ secrets.MONGO_PASSWORD }}@mongo:27017 \
                 --mongo.db=mongo"
-            
+
             # Restart cosmos-explorer container
             sudo docker restart cosmos-explorer
-            
+
             # Clean up unused Docker resources
-            sudo docker system prune -f
+            sudo docker system prune -f 
