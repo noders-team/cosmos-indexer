@@ -669,7 +669,7 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 			}
 			currMessages = append(currMessages, &msg)
 
-			log.Debug().
+			log.Info().
 				Str("txHash", currTxResp.Hash).
 				Str("from", currTxResp.From).
 				Str("to", currTxResp.To).
@@ -679,28 +679,30 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 
 		if currTxResp.TokenTransfer != nil {
 			tokenDec, err := decimal.NewFromString(currTxResp.TokenTransfer.Amount)
-			if err == nil && tokenDec.IntPart() > 0 {
-				coins := []types.Coin{types.NewCoin("eth", math.NewInt(tokenDec.IntPart()))}
-				msg := banktypes.MsgMultiSend{
-					Inputs: []banktypes.Input{
-						banktypes.Input{
-							Address: currTxResp.TokenTransfer.Address,
-							Coins:   coins,
+			if err == nil {
+				if tokenDec.IntPart() > 0 {
+					coins := []types.Coin{types.NewCoin("eth", math.NewInt(tokenDec.IntPart()))}
+					msg := banktypes.MsgMultiSend{
+						Inputs: []banktypes.Input{
+							banktypes.Input{
+								Address: currTxResp.TokenTransfer.Address,
+								Coins:   coins,
+							},
 						},
-					},
-					Outputs: []banktypes.Output{
-						banktypes.Output{
-							Address: currTxResp.TokenTransfer.Receiver,
-							Coins:   coins,
-						}}}
-				currMessages = append(currMessages, &msg)
+						Outputs: []banktypes.Output{
+							banktypes.Output{
+								Address: currTxResp.TokenTransfer.Receiver,
+								Coins:   coins,
+							}}}
+					currMessages = append(currMessages, &msg)
 
-				log.Info().
-					Str("txHash", currTxResp.Hash).
-					Str("from", currTxResp.From).
-					Str("tokenAmount", tokenDec.String()).
-					Str("tokenAddress", currTxResp.TokenTransfer.Address).
-					Msg("Added ERC-20 token transfer message")
+					log.Info().
+						Str("txHash", currTxResp.Hash).
+						Str("from", currTxResp.From).
+						Str("tokenAmount", tokenDec.String()).
+						Str("tokenAddress", currTxResp.TokenTransfer.Address).
+						Msg("Added ERC-20 token transfer message")
+				}
 			} else {
 				log.Err(err).Msgf("Failed to add token transfer message %s transfer amount %s",
 					tokenDec, currTxResp.TokenTransfer.Amount)

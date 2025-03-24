@@ -90,8 +90,8 @@ func TestChainRPC_GetEvmTxsByBlockHeight(t *testing.T) {
 		RPC:           "https://berachain-testnet-rpc.publicnode.com",
 	})
 
-	//cl.EvmRestURl = "https://berachain-testnet-rpc.publicnode.com"
-	cl.EvmRestURl = "https://berachain-rpc.publicnode.com"
+	cl.EvmRestURl = "https://berachain-testnet-rpc.publicnode.com"
+	//cl.EvmRestURl = "https://berachain-rpc.publicnode.com"
 
 	//testHeight := int64(10994467)
 	testHeight := int64(22947)
@@ -224,19 +224,61 @@ func TestERC20TransactionProcessing(t *testing.T) {
 	assert.Equal(t, "0x742d35cc6634c0532925a3b844bc454e4438f44e", strings.ToLower(logRecipient), "Recipient from logs should match input data")
 	assert.Equal(t, "1000000000000000000", logAmount.String(), "Amount from logs should match input data")
 
-	tx.TokenAmount = amount.String()
-	tx.TokenRecipient = recipient
-	tx.TokenAddress = tokenAddr
+	tx.TokenTransfer = &db.EvmTokenTransfer{
+		Amount:   amount.String(),
+		Receiver: recipient,
+		Address:  tokenAddr,
+	}
 
-	assert.NotEmpty(t, tx.TokenAmount, "Token amount should be set")
-	assert.NotEmpty(t, tx.TokenRecipient, "Token recipient should be set")
-	assert.NotEmpty(t, tx.TokenAddress, "Token address should be set")
+	assert.NotEmpty(t, tx.TokenTransfer.Amount, "Token amount should be set")
+	assert.NotEmpty(t, tx.TokenTransfer.Receiver, "Token recipient should be set")
+	assert.NotEmpty(t, tx.TokenTransfer.Address, "Token address should be set")
 	assert.Equal(t, "0", tx.Value, "Native token value should remain zero")
 
 	t.Logf("Successfully verified ERC-20 token transfer:")
 	t.Logf("  Transaction: %s", tx.Hash)
-	t.Logf("  Token Contract: %s", tx.TokenAddress)
+	t.Logf("  Token Contract: %s", tx.TokenTransfer.Address)
 	t.Logf("  From: %s", tx.From)
-	t.Logf("  To (Recipient): %s", tx.TokenRecipient)
-	t.Logf("  Amount: %s", tx.TokenAmount)
+	t.Logf("  To (Recipient): %s", tx.TokenTransfer.Receiver)
+	t.Logf("  Amount: %s", tx.TokenTransfer.Amount)
+}
+
+func TestChainRPC_HasTokenTransferInTx(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
+	cl := probe.GetProbeClient(config.Probe{
+		AccountPrefix: "bera",
+		ChainName:     "bera",
+		ChainID:       "bera",
+		RPC:           "https://berachain-testnet-rpc.publicnode.com",
+	})
+
+	cl.EvmRestURl = "https://berachain-rpc.publicnode.com"
+
+	testHeight := int64(2658118)
+	blockTime := time.Now()
+
+	t.Logf("Testing EVM transactions for block height: %d", testHeight)
+
+	rpcClient := NewChainRPC(cl)
+	evmTxs, err := rpcClient.GetEvmTxsByBlockHeight(testHeight, blockTime)
+
+	require.NoError(t, err, "Should not return an error when retrieving EVM transactions")
+
+	t.Logf("Found %d EVM transactions in block %d", len(evmTxs), testHeight)
+
+	require.NotEmpty(t, evmTxs, "Should have at least one EVM transaction")
+	foundTx := false
+	for _, tx := range evmTxs {
+		if tx.Hash == "0x8789c06a8b16db45fd34ebbedf6576e64e03d0794e3ba7368a0bf0f6d28789fd" {
+			foundTx = true
+			require.NotNil(t, tx.TokenTransfer)
+			require.Equal(t, tx.TokenTransfer.Receiver, "0x68a04dbac577d1a9e8442fd368c50d65d304ab17")
+			require.Equal(t, tx.TokenTransfer.Amount, "500000000000000000")
+			require.Equal(t, tx.TokenTransfer.Address, "0x656b95e550c07a9ffe548bd4085c72418ceb1dba")
+		}
+	}
+	require.True(t, foundTx)
 }
