@@ -34,7 +34,7 @@ on:
       deploy_after_build:
         description: 'Deploy this image after building'
         required: false
-        default: false
+        default: true
         type: boolean
       throttling:
         description: 'RPC throttling value (lower = more throttling)'
