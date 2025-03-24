@@ -95,19 +95,28 @@ jobs:
       
       - name: Create Deployment Summary
         run: |
+          # Get repository and owner from GITHUB_REPOSITORY
+          REPO_OWNER=$(echo "$GITHUB_REPOSITORY" | cut -d '/' -f 1)
+          REPO_NAME=$(echo "$GITHUB_REPOSITORY" | cut -d '/' -f 2)
+          
+          # Create direct URL to deployment workflow with prefilled values
+          DEPLOY_URL="https://github.com/$GITHUB_REPOSITORY/actions/workflows/deploy.yaml?query=workflow%3A%22Deploy+Indexer+-+PROD%22"
+          
           echo "## ✅ Image build completed" >> $GITHUB_STEP_SUMMARY
           echo -e "**Image tag:**\n\`\`\`\n${{ steps.build.outputs.IMAGE_TAG }}\n\`\`\`" >> $GITHUB_STEP_SUMMARY
+          
           if [ "${{ github.event.inputs.deploy_after_build }}" == "true" ]; then
             echo "Image will be automatically deployed to ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
           else
             echo "To deploy this image, you can:" >> $GITHUB_STEP_SUMMARY
-            echo "1. Run this workflow again with the 'Deploy this image after building' option checked" >> $GITHUB_STEP_SUMMARY
+            echo "1. **[Deploy this image now](${DEPLOY_URL})**" >> $GITHUB_STEP_SUMMARY
+            echo "   - Click the 'Run workflow' button" >> $GITHUB_STEP_SUMMARY
+            echo "   - Image tag: \`${{ steps.build.outputs.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "   - Environment: \`${{ github.event.inputs.environment }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "2. Or run this workflow again with the 'Deploy this image after building' option checked" >> $GITHUB_STEP_SUMMARY
             echo "   - Use the same branch and environment" >> $GITHUB_STEP_SUMMARY
             echo "   - Enter '${{ steps.build.outputs.IMAGE_TAG }}' as the tag name" >> $GITHUB_STEP_SUMMARY
-            echo "2. Or manually trigger the deployment workflow:" >> $GITHUB_STEP_SUMMARY
-            echo "   - Go to the Actions tab" >> $GITHUB_STEP_SUMMARY
-            echo "   - Select 'Deploy Indexer - PROD'" >> $GITHUB_STEP_SUMMARY
-            echo "   - Use the tag shown above in the 'Docker image tag to deploy' field" >> $GITHUB_STEP_SUMMARY
           fi
 
   deploy:
