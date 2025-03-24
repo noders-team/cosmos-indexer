@@ -677,7 +677,7 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 				Msg("Adding native token transfer message")
 		}
 
-		if currTxResp.TokenTransfer != nil {
+		if currTxResp.TokenTransfer != nil && currTxResp.TokenTransfer.Amount != "" {
 			tokenDec, err := decimal.NewFromString(currTxResp.TokenTransfer.Amount)
 			if err == nil {
 				if tokenDec.IntPart() > 0 {
