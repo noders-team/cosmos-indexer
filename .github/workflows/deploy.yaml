@@ -27,6 +27,16 @@ on:
 
           # dev
           - celestia-dev
+  workflow_call:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to deploy'
+        required: true
+        type: string
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: string
 
 jobs:
   deploy:

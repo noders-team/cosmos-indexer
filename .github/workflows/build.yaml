@@ -31,6 +31,11 @@ on:
 
           # dev
           - celestia-dev
+      deploy_after_build:
+        description: 'Deploy this image after building'
+        required: false
+        default: false
+        type: boolean
   push:
     tags:
       - '*'
@@ -39,6 +44,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'celestia-prod' }}
+    outputs:
+      IMAGE_TAG: ${{ steps.build.outputs.IMAGE_TAG }}
 
     steps:
       - name: Checkout repository
@@ -89,8 +96,25 @@ jobs:
       - name: Create Deployment Summary
         run: |
           echo "## ✅ Image build completed" >> $GITHUB_STEP_SUMMARY
-          echo "Image tag: \`${{ steps.build.outputs.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "To deploy this image, you need to manually trigger the deployment workflow:" >> $GITHUB_STEP_SUMMARY
-          echo "1. Go to the Actions tab" >> $GITHUB_STEP_SUMMARY
-          echo "2. Select 'Deploy Indexer - PROD'" >> $GITHUB_STEP_SUMMARY
-          echo "3. Use the tag: \`${{ steps.build.outputs.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+          echo -e "**Image tag:**\n\`\`\`\n${{ steps.build.outputs.IMAGE_TAG }}\n\`\`\`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event.inputs.deploy_after_build }}" == "true" ]; then
+            echo "Image will be automatically deployed to ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "To deploy this image, you can:" >> $GITHUB_STEP_SUMMARY
+            echo "1. Run this workflow again with the 'Deploy this image after building' option checked" >> $GITHUB_STEP_SUMMARY
+            echo "   - Use the same branch and environment" >> $GITHUB_STEP_SUMMARY
+            echo "   - Enter '${{ steps.build.outputs.IMAGE_TAG }}' as the tag name" >> $GITHUB_STEP_SUMMARY
+            echo "2. Or manually trigger the deployment workflow:" >> $GITHUB_STEP_SUMMARY
+            echo "   - Go to the Actions tab" >> $GITHUB_STEP_SUMMARY
+            echo "   - Select 'Deploy Indexer - PROD'" >> $GITHUB_STEP_SUMMARY
+            echo "   - Use the tag shown above in the 'Docker image tag to deploy' field" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  deploy:
+    needs: build
+    if: ${{ github.event.inputs.deploy_after_build == 'true' }}
+    uses: ./.github/workflows/deploy.yaml
+    with:
+      image_tag: ${{ needs.build.outputs.IMAGE_TAG }}
+      environment: ${{ github.event.inputs.environment }}
+    secrets: inherit
