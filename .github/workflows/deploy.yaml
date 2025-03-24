@@ -30,7 +30,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest-minimal
+    runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
 
     steps:
