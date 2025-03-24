@@ -92,5 +92,5 @@ jobs:
           echo "Image tag: \`${{ steps.build.outputs.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
           echo "To deploy this image, you need to manually trigger the deployment workflow:" >> $GITHUB_STEP_SUMMARY
           echo "1. Go to the Actions tab" >> $GITHUB_STEP_SUMMARY
-          echo "2. Select 'Deploy Indexer Image'" >> $GITHUB_STEP_SUMMARY
+          echo "2. Select 'Deploy Indexer - PROD'" >> $GITHUB_STEP_SUMMARY
           echo "3. Use the tag: \`${{ steps.build.outputs.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY

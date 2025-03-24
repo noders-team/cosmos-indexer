@@ -1,4 +1,4 @@
-name: Deploy Indexer Image
+name: Deploy Indexer - PROD
 
 on:
   workflow_dispatch:
