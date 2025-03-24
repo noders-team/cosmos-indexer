@@ -127,8 +127,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const imageTag = '${{ needs.build.outputs.IMAGE_TAG }}';
-            const environment = '${{ github.event.inputs.environment || "celestia-prod" }}';
+            const imageTag = "${{ needs.build.outputs.IMAGE_TAG }}";
+            const environment = "${{ github.event.inputs.environment || 'celestia-prod' }}";
             
             const form = `
             # Deploy Image Options
