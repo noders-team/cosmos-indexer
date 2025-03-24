@@ -36,6 +36,22 @@ on:
         required: false
         default: false
         type: boolean
+      throttling:
+        description: 'RPC throttling value (lower = more throttling)'
+        required: false
+        default: '0.105'
+      rpc_workers:
+        description: 'Number of RPC workers'
+        required: false
+        default: '3'
+      start_block:
+        description: 'Starting block for indexing (leave empty to use environment default)'
+        required: false
+      reindex:
+        description: 'Force reindexing'
+        required: false
+        default: false
+        type: boolean
   push:
     tags:
       - '*'
@@ -100,10 +116,17 @@ jobs:
           
           if [ "${{ github.event.inputs.deploy_after_build }}" == "true" ]; then
             echo "Image will be automatically deployed to ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Deployment options:" >> $GITHUB_STEP_SUMMARY
+            echo "- Image tag: ${{ steps.build.outputs.IMAGE_TAG }}" >> $GITHUB_STEP_SUMMARY
+            echo "- Environment: ${{ github.event.inputs.environment || 'celestia-prod' }}" >> $GITHUB_STEP_SUMMARY
+            echo "- Throttling: ${{ github.event.inputs.throttling || vars.BASE_THROTTLING || '0.105' }}" >> $GITHUB_STEP_SUMMARY
+            echo "- RPC Workers: ${{ github.event.inputs.rpc_workers || vars.BASE_RPC_WORKERS || '3' }}" >> $GITHUB_STEP_SUMMARY
+            echo "- Start Block: ${{ github.event.inputs.start_block || vars.BASE_START_BLOCK }}" >> $GITHUB_STEP_SUMMARY
+            echo "- Reindex: ${{ github.event.inputs.reindex || vars.BASE_REINDEX || false }}" >> $GITHUB_STEP_SUMMARY
           else
-            echo "A deployment job has been queued and is waiting for your approval." >> $GITHUB_STEP_SUMMARY
-            echo "- To deploy with **default settings**, approve the deployment when prompted." >> $GITHUB_STEP_SUMMARY
-            echo "- To deploy with **custom settings** (throttling, workers, etc.), check the issue created for deployment options." >> $GITHUB_STEP_SUMMARY
+            echo "A deployment job has been queued." >> $GITHUB_STEP_SUMMARY
+            echo "You will be prompted for approval when it's ready." >> $GITHUB_STEP_SUMMARY
           fi
 
   deploy:
@@ -119,48 +142,14 @@ jobs:
             echo "should_deploy=true" >> $GITHUB_OUTPUT
           else
             echo "should_deploy=false" >> $GITHUB_OUTPUT
+            echo "Deployment options:"
+            echo "- Image tag: ${{ needs.build.outputs.IMAGE_TAG }}"
+            echo "- Environment: ${{ github.event.inputs.environment || 'celestia-prod' }}"
+            echo "- Throttling: ${{ github.event.inputs.throttling || vars.BASE_THROTTLING || '0.105' }}"
+            echo "- RPC Workers: ${{ github.event.inputs.rpc_workers || vars.BASE_RPC_WORKERS || '3' }}"
+            echo "- Start Block: ${{ github.event.inputs.start_block || vars.BASE_START_BLOCK }}"
+            echo "- Reindex: ${{ github.event.inputs.reindex || false }}"
           fi
-
-      - name: Create deployment options form
-        if: steps.check_deploy.outputs.should_deploy != 'true'
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const imageTag = "${{ needs.build.outputs.IMAGE_TAG }}";
-            const environment = "${{ github.event.inputs.environment || 'celestia-prod' }}";
-            
-            const form = `
-            # Deploy Image Options
-            
-            **Image tag:** \`${imageTag}\`
-            **Environment:** \`${environment}\`
-            
-            ## Select options to deploy with:
-            
-            <details>
-            <summary>Click to expand deployment options</summary>
-            
-            To deploy with custom options, start a new "Deploy Indexer - PROD" workflow and set:
-            - Image tag: \`${imageTag}\`
-            - Environment: Select from dropdown
-            - Any other options you need to customize
-            
-            [Start Deploy Workflow](https://github.com/${{ github.repository }}/actions/workflows/deploy.yaml)
-            </details>
-            
-            Or to deploy with the default options for \`${environment}\`, approve below:
-            `;
-            
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `Deploy image ${imageTag} to ${environment}`,
-              body: form,
-              labels: ['deployment']
-            });
-            
-            console.log('Created deployment options form as an issue');
 
       - name: Wait for deployment approval
         if: steps.check_deploy.outputs.should_deploy != 'true'
@@ -169,8 +158,14 @@ jobs:
           secret: ${{ github.TOKEN }}
           approvers: ${{ github.actor }}
           minimum-approvals: 1
-          issue-title: "Deploy image ${{ needs.build.outputs.IMAGE_TAG }} with default options"
-          issue-body: "Approve to deploy image `${{ needs.build.outputs.IMAGE_TAG }}` to environment `${{ github.event.inputs.environment || 'celestia-prod' }}` with the default configuration.\n\nIf you need to customize deployment options, cancel this and use the deployment form issue."
+          issue-title: "Deploy image ${{ needs.build.outputs.IMAGE_TAG }} with selected options"
+          issue-body: |
+            Approve to deploy image `${{ needs.build.outputs.IMAGE_TAG }}` to environment `${{ github.event.inputs.environment || 'celestia-prod' }}` with the following options:
+            
+            - Throttling: `${{ github.event.inputs.throttling || vars.BASE_THROTTLING || '0.105' }}`
+            - RPC Workers: `${{ github.event.inputs.rpc_workers || vars.BASE_RPC_WORKERS || '3' }}`
+            - Start Block: `${{ github.event.inputs.start_block || vars.BASE_START_BLOCK }}`
+            - Reindex: `${{ github.event.inputs.reindex || false }}`
           exclude-workflow-initiator-as-approver: false
           timeout-minutes: 60
 
@@ -234,12 +229,12 @@ jobs:
               /bin/sh -c "cosmos-indexer index \
                 --log.pretty=true \
                 --log.level=info \
-                --base.start-block=${{ vars.BASE_START_BLOCK }} \
+                --base.start-block=${{ github.event.inputs.start_block || vars.BASE_START_BLOCK }} \
                 --base.end-block=${{ vars.BASE_END_BLOCK || -1 }} \
-                --base.throttling=${{ vars.BASE_THROTTLING || 0.105 }} \
-                --base.rpc-workers=${{ vars.BASE_RPC_WORKERS || 3 }} \
+                --base.throttling=${{ github.event.inputs.throttling || vars.BASE_THROTTLING || 0.105 }} \
+                --base.rpc-workers=${{ github.event.inputs.rpc_workers || vars.BASE_RPC_WORKERS || 3 }} \
                 --base.index-transactions=${{ vars.BASE_INDEX_TRANSACTIONS || true }} \
-                --base.reindex=${{ vars.BASE_REINDEX || false }} \
+                --base.reindex=${{ github.event.inputs.reindex || vars.BASE_REINDEX || false }} \
                 --probe.rpc=${{ vars.PROBE_RPC || '' }} \
                 --probe.account-prefix=${{ vars.PROBE_ACCOUNT_PREFIX }} \
                 --probe.chain-id=${{ vars.PROBE_CHAIN_ID }} \
