@@ -116,61 +116,32 @@ jobs:
           
           if [ "${{ github.event.inputs.deploy_after_build }}" == "true" ]; then
             echo "Image will be automatically deployed to ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Deployment options:" >> $GITHUB_STEP_SUMMARY
-            echo "- Image tag: ${{ steps.build.outputs.IMAGE_TAG }}" >> $GITHUB_STEP_SUMMARY
-            echo "- Environment: ${{ github.event.inputs.environment || 'celestia-prod' }}" >> $GITHUB_STEP_SUMMARY
-            echo "- Throttling: ${{ github.event.inputs.throttling || vars.BASE_THROTTLING || '0.105' }}" >> $GITHUB_STEP_SUMMARY
-            echo "- RPC Workers: ${{ github.event.inputs.rpc_workers || vars.BASE_RPC_WORKERS || '3' }}" >> $GITHUB_STEP_SUMMARY
-            echo "- Start Block: ${{ github.event.inputs.start_block || vars.BASE_START_BLOCK }}" >> $GITHUB_STEP_SUMMARY
-            echo "- Reindex: ${{ github.event.inputs.reindex || vars.BASE_REINDEX || false }}" >> $GITHUB_STEP_SUMMARY
           else
-            echo "A deployment job has been queued." >> $GITHUB_STEP_SUMMARY
-            echo "You will be prompted for approval when it's ready." >> $GITHUB_STEP_SUMMARY
+            echo "To deploy this image:" >> $GITHUB_STEP_SUMMARY
+            echo "1. Run the **Build Indexer** workflow again" >> $GITHUB_STEP_SUMMARY
+            echo "2. Enter the same parameters (branch, environment)" >> $GITHUB_STEP_SUMMARY
+            echo "3. Set '${{ steps.build.outputs.IMAGE_TAG }}' as the tag" >> $GITHUB_STEP_SUMMARY
+            echo "4. Check the 'Deploy this image after building' option" >> $GITHUB_STEP_SUMMARY
+            echo "5. Click Run workflow" >> $GITHUB_STEP_SUMMARY
           fi
 
   deploy:
     needs: build
-    if: always()
+    if: ${{ github.event.inputs.deploy_after_build == 'true' }}
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'celestia-prod' }}
     steps:
-      - name: Check if automatic deployment was requested
-        id: check_deploy
+      - name: Show deployment options
         run: |
-          if [ "${{ github.event.inputs.deploy_after_build }}" == "true" ]; then
-            echo "should_deploy=true" >> $GITHUB_OUTPUT
-          else
-            echo "should_deploy=false" >> $GITHUB_OUTPUT
-            echo "Deployment options:"
-            echo "- Image tag: ${{ needs.build.outputs.IMAGE_TAG }}"
-            echo "- Environment: ${{ github.event.inputs.environment || 'celestia-prod' }}"
-            echo "- Throttling: ${{ github.event.inputs.throttling || vars.BASE_THROTTLING || '0.105' }}"
-            echo "- RPC Workers: ${{ github.event.inputs.rpc_workers || vars.BASE_RPC_WORKERS || '3' }}"
-            echo "- Start Block: ${{ github.event.inputs.start_block || vars.BASE_START_BLOCK }}"
-            echo "- Reindex: ${{ github.event.inputs.reindex || false }}"
-          fi
-
-      - name: Wait for deployment approval
-        if: steps.check_deploy.outputs.should_deploy != 'true'
-        uses: trstringer/manual-approval@v1
-        with:
-          secret: ${{ github.TOKEN }}
-          approvers: ${{ github.actor }}
-          minimum-approvals: 1
-          issue-title: "Deploy image ${{ needs.build.outputs.IMAGE_TAG }} with selected options"
-          issue-body: |
-            Approve to deploy image `${{ needs.build.outputs.IMAGE_TAG }}` to environment `${{ github.event.inputs.environment || 'celestia-prod' }}` with the following options:
-            
-            - Throttling: `${{ github.event.inputs.throttling || vars.BASE_THROTTLING || '0.105' }}`
-            - RPC Workers: `${{ github.event.inputs.rpc_workers || vars.BASE_RPC_WORKERS || '3' }}`
-            - Start Block: `${{ github.event.inputs.start_block || vars.BASE_START_BLOCK }}`
-            - Reindex: `${{ github.event.inputs.reindex || false }}`
-          exclude-workflow-initiator-as-approver: false
-          timeout-minutes: 60
+          echo "Deploying with these options:"
+          echo "- Image tag: ${{ needs.build.outputs.IMAGE_TAG }}"
+          echo "- Environment: ${{ github.event.inputs.environment || 'celestia-prod' }}"
+          echo "- Throttling: ${{ github.event.inputs.throttling || vars.BASE_THROTTLING || '0.105' }}"
+          echo "- RPC Workers: ${{ github.event.inputs.rpc_workers || vars.BASE_RPC_WORKERS || '3' }}"
+          echo "- Start Block: ${{ github.event.inputs.start_block || vars.BASE_START_BLOCK }}"
+          echo "- Reindex: ${{ github.event.inputs.reindex || false }}"
 
       - name: Deploy to remote server
-        if: steps.check_deploy.outputs.should_deploy == 'true' || success()
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.HOST }}
