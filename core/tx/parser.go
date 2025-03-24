@@ -681,11 +681,18 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 			tokenDec, err := decimal.NewFromString(currTxResp.TokenTransfer.Amount)
 			if err == nil && tokenDec.IntPart() > 0 {
 				coins := []types.Coin{types.NewCoin("eth", math.NewInt(tokenDec.IntPart()))}
-				msg := banktypes.MsgSend{
-					FromAddress: currTxResp.TokenTransfer.Address,
-					ToAddress:   currTxResp.TokenTransfer.Receiver,
-					Amount:      coins,
-				}
+				msg := banktypes.MsgMultiSend{
+					Inputs: []banktypes.Input{
+						banktypes.Input{
+							Address: currTxResp.TokenTransfer.Address,
+							Coins:   coins,
+						},
+					},
+					Outputs: []banktypes.Output{
+						banktypes.Output{
+							Address: currTxResp.TokenTransfer.Receiver,
+							Coins:   coins,
+						}}}
 				currMessages = append(currMessages, &msg)
 
 				log.Info().
@@ -695,7 +702,8 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 					Str("tokenAddress", currTxResp.TokenTransfer.Address).
 					Msg("Added ERC-20 token transfer message")
 			} else {
-				log.Err(err).Msgf("Failed to add token transfer message %s", tokenDec)
+				log.Err(err).Msgf("Failed to add token transfer message %s transfer amount %s",
+					tokenDec, currTxResp.TokenTransfer.Amount)
 			}
 		}
 
