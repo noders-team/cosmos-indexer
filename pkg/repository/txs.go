@@ -161,7 +161,7 @@ func (r *txs) ChartTxByDay(ctx context.Context, from time.Time, to time.Time) ([
 func (r *txs) TransactionsPerPeriod(ctx context.Context, to time.Time) (allTx,
 	all24H, all48H, all30D int64, err error,
 ) {
-	query := `select count(*) from txes`
+	query := `select sum(total_tx_count) from daily_tx_counts`
 	row := r.db.QueryRow(ctx, query)
 	if err := row.Scan(&allTx); err != nil {
 		return 0, 0, 0, 0, err
@@ -191,7 +191,7 @@ func (r *txs) TransactionsPerPeriod(ctx context.Context, to time.Time) (allTx,
 }
 
 func (r *txs) txCountPerPeriod(ctx context.Context, from, to time.Time) (int64, error) {
-	query := `select COALESCE(count(*),0) from txes where txes.timestamp between $1 AND $2`
+	query := `select COALESCE(SUM(total_tx_count),0) from daily_tx_counts where daily_tx_counts.day between $1 AND $2`
 	row := r.db.QueryRow(ctx, query, from.UTC(), to.UTC())
 	var res int64
 	if err := row.Scan(&res); err != nil {
@@ -1260,6 +1260,14 @@ func (r *txs) UpdateViews(ctx context.Context) error {
 	`)
 	if err != nil {
 		log.Err(err).Msgf("error refreshing daily_fees_summary")
+		return err
+	}
+
+	_, err = r.db.Exec(ctx, `
+		REFRESH MATERIALIZED VIEW CONCURRENTLY daily_tx_counts WITH DATA;
+	`)
+	if err != nil {
+		log.Err(err).Msgf("error refreshing daily_tx_counts")
 		return err
 	}
 
