@@ -622,7 +622,7 @@ func (r *blocksServer) GetVotesByAccounts(ctx context.Context,
 		}
 	}
 
-	var voteUnique = false
+	voteUnique := false
 	if in.VoteUnique != nil {
 		voteUnique = *in.VoteUnique
 	}
