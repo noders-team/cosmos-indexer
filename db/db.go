@@ -263,6 +263,23 @@ group by inn.id, inn.timestamp, inn.hash, inn.height;`
 		return err
 	}
 
+	queryFeesSummary := `CREATE MATERIALIZED VIEW IF NOT EXISTS daily_fees_summary AS
+SELECT
+    DATE(txes.timestamp) AS day,
+    SUM(fs.amount) AS total_fees
+FROM txes
+LEFT JOIN fees fs ON fs.tx_id = txes.id
+WHERE txes.timestamp >= NOW() - INTERVAL '30 days'
+GROUP BY DATE(txes.timestamp);`
+	if err = db.Exec(queryFeesSummary).Error; err != nil {
+		return err
+	}
+
+	queryFeesSummaryIdx := `CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_fees_day ON daily_fees_summary(day);`
+	if err = db.Exec(queryFeesSummaryIdx).Error; err != nil {
+		return err
+	}
+
 	log.Info().Msgf("Migrating tables - DONE")
 	return nil
 }

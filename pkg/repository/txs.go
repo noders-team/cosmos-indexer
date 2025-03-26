@@ -215,11 +215,9 @@ func (r *txs) VolumePerPeriod(ctx context.Context, to time.Time) (decimal.Decima
 }
 
 func (r *txs) volumePerPeriod(ctx context.Context, from, to time.Time) (decimal.Decimal, error) {
-	query := `select COALESCE(SUM(fs.amount),0)
-    		from txes
-    		left join fees fs on fs.tx_id = txes.id
-			left join denoms dm on fs.denomination_id = dm.id
-			where txes.timestamp between $1 AND $2`
+	query := `select COALESCE(SUM(fs.total_fees),0)
+    			from daily_fees_summary fs
+    			WHERE fs.day between $1 AND $2`
 	row := r.db.QueryRow(ctx, query, from.UTC(), to.UTC())
 	var total decimal.Decimal
 	if err := row.Scan(&total); err != nil {
@@ -1254,6 +1252,14 @@ func (r *txs) UpdateViews(ctx context.Context) error {
 	`)
 	if err != nil {
 		log.Err(err).Msgf("error refreshing depositors_normalized")
+		return err
+	}
+
+	_, err = r.db.Exec(ctx, `
+		REFRESH MATERIALIZED VIEW CONCURRENTLY daily_fees_summary WITH DATA;
+	`)
+	if err != nil {
+		log.Err(err).Msgf("error refreshing daily_fees_summary")
 		return err
 	}
 
