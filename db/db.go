@@ -280,6 +280,22 @@ GROUP BY DATE(txes.timestamp);`
 		return err
 	}
 
+	queryTxCount := `CREATE MATERIALIZED VIEW IF NOT EXISTS daily_tx_counts AS
+SELECT
+    DATE(timestamp) AS day,
+    COUNT(*) AS total_tx_count
+FROM txes
+WHERE timestamp >= NOW() - INTERVAL '360 days'
+GROUP BY DATE(timestamp) ORDER BY DATE(timestamp) DESC;`
+	if err = db.Exec(queryTxCount).Error; err != nil {
+		return err
+	}
+
+	queryTxCountIdx := `CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_tx_counts_day ON daily_tx_counts(day);`
+	if err = db.Exec(queryTxCountIdx).Error; err != nil {
+		return err
+	}
+
 	log.Info().Msgf("Migrating tables - DONE")
 	return nil
 }
