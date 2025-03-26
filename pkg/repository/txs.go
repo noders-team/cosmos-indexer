@@ -701,7 +701,7 @@ func (r *txs) GetWalletsCount(ctx context.Context) (*model.TotalWallets, error) 
 	}
 
 	// total wallets
-	queryAll := `select count(distinct account) from transactions_normalized`
+	queryAll := `SELECT COUNT(*) FROM (SELECT account FROM transactions_normalized GROUP BY account) subquery`
 	row = r.db.QueryRow(ctx, queryAll)
 	var countAll int64
 	if err := row.Scan(&countAll); err != nil {
