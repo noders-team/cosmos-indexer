@@ -449,7 +449,9 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 		queryAll := `select count(*) from txes where txes.block_id = $1`
 		row = r.db.QueryRow(ctx, queryAll, blockID)
 	} else {
-		queryAll := `select count(*) from txes`
+		// TODO temporarly
+		//queryAll := `select count(*) from txes`
+		queryAll := `select count(*) from transactions_normalized`
 		row = r.db.QueryRow(ctx, queryAll)
 	}
 
