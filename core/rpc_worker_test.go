@@ -4,9 +4,10 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/noders-team/cosmos-indexer/probe"
+
 	"github.com/noders-team/cosmos-indexer/clients"
 	"github.com/noders-team/cosmos-indexer/config"
-	"github.com/noders-team/cosmos-indexer/probe"
 	"github.com/noders-team/cosmos-indexer/rpc"
 	"github.com/stretchr/testify/require"
 )
@@ -19,15 +20,11 @@ func TestDecoding(t *testing.T) {
 		RPC:           "http://65.21.83.57:26657",
 	}
 	cl := probe.GetProbeClient(probeCfg)
-	rpcClient := rpc.URIClient{
-		Address: cl.Config.RPCAddr,
-		Client:  &http.Client{},
-	}
 	chainRpcClient := clients.NewChainRPC(cl)
 
 	blockWorker := NewBlockRPCWorker("id", nil, cl, nil, chainRpcClient)
 
-	blData := blockWorker.FetchBlock(rpcClient, &EnqueueData{
+	blData := blockWorker.FetchBlock(&EnqueueData{
 		Height:            2480035,
 		IndexTransactions: true,
 	})

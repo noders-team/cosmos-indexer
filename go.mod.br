@@ -21,10 +21,9 @@ replace (
 require (
 	cosmossdk.io/core v1.0.0-alpha.6
 	cosmossdk.io/math v1.4.0
-	cosmossdk.io/x/bank v0.0.0-20241218110910-47409028a73d
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de
 	github.com/cometbft/cometbft v1.0.0
-	github.com/cosmos/cosmos-sdk v0.52.0
+	github.com/cosmos/cosmos-sdk v0.47.14
 	github.com/doug-martin/goqu/v9 v9.19.0
 	github.com/go-resty/resty/v2 v2.16.5
 	github.com/jackc/pgx/v5 v5.3.1

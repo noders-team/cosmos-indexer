@@ -74,12 +74,15 @@ func (r *blocksServer) TxChartByDay(ctx context.Context, in *pb.TxChartByDayRequ
 }
 
 func (r *blocksServer) TxByHash(ctx context.Context, in *pb.TxByHashRequest) (*pb.TxByHashResponse, error) {
-	res, err := r.srvTx.GetTxByHash(ctx, in.Hash)
+	tx, err := r.srvTx.GetTxByHash(ctx, in.Hash)
 	if err != nil {
 		return &pb.TxByHashResponse{}, err
 	}
+
+	txProto := r.txToProto(tx)
+
 	return &pb.TxByHashResponse{
-		Tx: r.txToProto(res),
+		Tx: txProto,
 	}, nil
 }
 
@@ -257,7 +260,7 @@ func (r *blocksServer) TransactionRawLog(ctx context.Context, in *pb.Transaction
 }
 
 func (r *blocksServer) txToProto(tx *model.Tx) *pb.TxByHash {
-	return &pb.TxByHash{
+	result := &pb.TxByHash{
 		Memo:                        tx.Memo,
 		TimeoutHeight:               fmt.Sprintf("%d", tx.TimeoutHeight),
 		ExtensionOptions:            tx.ExtensionOptions,
@@ -292,6 +295,8 @@ func (r *blocksServer) txToProto(tx *model.Tx) *pb.TxByHash {
 		SenderReceiver: r.txSenderToProto(tx.SenderReceiver),
 		Events:         r.toEventsProto(tx.Events),
 	}
+
+	return result
 }
 
 func (r *blocksServer) toEventsProto(in []*model.TxEvents) []*pb.TxEvent {

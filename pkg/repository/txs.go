@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"crypto/md5"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -55,12 +56,15 @@ type Txs interface {
 	ProposalDepositors(ctx context.Context, proposalID int,
 		sortBy *model.SortBy, limit int64, offset int64) ([]*model.ProposalDeposit, int64, error)
 	TotalRewardByAccount(ctx context.Context, account string) ([]*model.DecCoin, error)
+	GetEvmTransactionDetails(ctx context.Context, txHash string) (map[string]interface{}, error)
+	IsEvmTransaction(ctx context.Context, txHash string) (bool, error)
 }
 
 type TxsFilter struct {
 	TxHash        *string
 	TxBlockHeight *int64
 	TxHashes      []string
+	MessageType   []string
 }
 
 type txs struct {
@@ -350,16 +354,16 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 		return nil, 0, err
 	}
 
-	log.Debug().Msgf("=> Transactions ==> query: %s", query)
+	log.Info().Msgf("=> Transactions ==> query: %s", query)
 
 	startTime := time.Now()
-	log.Debug().Msgf("=> TransactionsByEventValue ==> transaction main start: %s", startTime.String())
+	log.Info().Msgf("=> TransactionsByEventValue ==> transaction main start: %s", startTime.String())
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		log.Err(err).Msgf("Transactions Query error")
 		return nil, 0, err
 	}
-	log.Debug().Msgf("=> TransactionsByEventValue ==> transaction main finish: %s", time.Since(startTime).String())
+	log.Info().Msgf("=> TransactionsByEventValue ==> transaction main finish: %s", time.Since(startTime).String())
 
 	result := make([]*model.Tx, 0)
 	if rows != nil {
@@ -391,7 +395,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 			tx.NonCriticalExtensionOptions = nonCriticalExtensionOptions
 
 			startTime := time.Now()
-			log.Debug().Msgf("=> TransactionsByEventValue ==> transaction loop start: %s", startTime.String())
+			log.Info().Msgf("=> TransactionsByEventValue ==> transaction loop start: %s", startTime.String())
 
 			var block *models.Block
 			if block, err = r.blockInfo(ctx, tx.BlockID); err != nil {
@@ -400,7 +404,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 			if block != nil {
 				tx.Block = *block
 			}
-			log.Debug().Msgf("=> TransactionsByEventValue ==> transaction loop block: %s", time.Since(startTime).String())
+			log.Info().Msgf("=> TransactionsByEventValue ==> transaction loop block: %s", time.Since(startTime).String())
 
 			startTime = time.Now()
 			var fees []model.Fee
@@ -408,7 +412,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 				log.Err(err).Msgf("error in feesByTransaction")
 			}
 			tx.Fees = fees
-			log.Debug().Msgf("=> TransactionsByEventValue ==> transaction loop fees: %s", time.Since(startTime).String())
+			log.Info().Msgf("=> TransactionsByEventValue ==> transaction loop fees: %s", time.Since(startTime).String())
 
 			authInfo.Fee = authInfoFee
 			authInfo.Tip = authInfoTip
@@ -421,7 +425,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 			if err == nil {
 				tx.SenderReceiver = res
 			}
-			log.Debug().Msgf("=> TransactionsByEventValue ==> transaction loop GetSenderAndReceiverV2: %s", time.Since(startTime).String())
+			log.Info().Msgf("=> TransactionsByEventValue ==> transaction loop GetSenderAndReceiverV2: %s", time.Since(startTime).String())
 
 			result = append(result, &tx)
 		}
@@ -438,14 +442,16 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 	}
 
 	startTime = time.Now()
-	log.Debug().Msgf("=> TransactionsByEventValue ==> transaction total: %s", startTime.String())
+	log.Info().Msgf("=> TransactionsByEventValue ==> transaction total: %s", startTime.String())
 
 	var row pgx.Row
 	if blockID >= 0 {
 		queryAll := `select count(*) from txes where txes.block_id = $1`
 		row = r.db.QueryRow(ctx, queryAll, blockID)
 	} else {
-		queryAll := `select count(*) from txes`
+		// TODO temporarly
+		//queryAll := `select count(*) from txes`
+		queryAll := `select sum(total_tx_count) from daily_tx_counts`
 		row = r.db.QueryRow(ctx, queryAll)
 	}
 
@@ -454,7 +460,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 		log.Err(err).Msgf("queryAll error")
 		return nil, 0, err
 	}
-	log.Debug().Msgf("=> TransactionsByEventValue ==> transaction total finish: %s", time.Since(startTime).String())
+	log.Info().Msgf("=> TransactionsByEventValue ==> transaction total finish: %s", time.Since(startTime).String())
 
 	return result, allTx, nil
 }
@@ -671,8 +677,9 @@ func (r *txs) ExtractNumber(value string) (decimal.Decimal, string, error) {
 }
 
 func (r *txs) GetWalletsCount(ctx context.Context) (*model.TotalWallets, error) {
-	query := `select count(distinct account) from transactions_normalized`
-	queryPerDate := query + ` where date(time) = date($1)`
+	query := "SELECT COUNT(*) FROM (SELECT account FROM transactions_normalized %s GROUP BY account) subquery"
+
+	queryPerDate := fmt.Sprintf(query, " where time >= $1 AND time < $1 + INTERVAL '1 day'")
 	row := r.db.QueryRow(ctx, queryPerDate, time.Now().UTC())
 	var count24H int64
 	if err := row.Scan(&count24H); err != nil {
@@ -687,7 +694,7 @@ func (r *txs) GetWalletsCount(ctx context.Context) (*model.TotalWallets, error) 
 		count48H = 0
 	}
 
-	queryMoreDate := query + ` where date(time) >= date($1)`
+	queryMoreDate := fmt.Sprintf(query, " where time >= $1")
 	firstDay := time.Date(time.Now().UTC().Year(), time.Now().UTC().Month(), 1, 0, 0, 0, 0, time.Local)
 	row = r.db.QueryRow(ctx, queryMoreDate, firstDay)
 	var count30D int64
@@ -708,7 +715,7 @@ func (r *txs) GetWalletsCount(ctx context.Context) (*model.TotalWallets, error) 
 }
 
 func (r *txs) GetWalletsCountPerPeriod(ctx context.Context, startDate, endDate time.Time) (int64, error) {
-	query := `select count(distinct account) from transactions_normalized where date(time) BETWEEN date($1) and date($2)`
+	query := `SELECT COUNT(*) FROM (SELECT account FROM transactions_normalized where time BETWEEN date($1) and date($2) GROUP BY account) subquery`
 	row := r.db.QueryRow(ctx, query, startDate.UTC(), endDate.UTC())
 	var count int64
 	if err := row.Scan(&count); err != nil {
@@ -774,7 +781,7 @@ func (r *txs) GetWalletsWithTx(ctx context.Context, limit int64, offset int64) (
 }
 
 func (r *txs) TxCountByAccounts(ctx context.Context, accounts []string) ([]*model.WalletWithTxs, error) {
-	query := `SELECT account, count(distinct tx_hash) from transactions_normalized where account=ANY($1) GROUP BY account`
+	query := `SELECT account, count(tx_hash) from transactions_normalized where account=ANY($1) GROUP BY account`
 	rows, err := r.db.Query(ctx, query, accounts)
 	if err != nil {
 		return nil, err
@@ -820,7 +827,7 @@ func (r *txs) getTransactionsByTypes(ctx context.Context, accountAddress string,
 				 left join message_events on messages.id = message_events.message_id
 				 left join message_event_types on message_events.message_event_type_id=message_event_types.id
 				 left join message_event_attributes on message_events.id = message_event_attributes.message_event_id
-				 left join message_event_attribute_keys on message_event_attributes.message_event_attribute_key_id = message_event_attribute_keys.id
+				 left join message_event_attribute_keys on message_events.id = message_event_attributes.message_event_attribute_key_id
 		where message_types.message_type=ANY($4)
 		  and message_event_attributes.value=$1
 		group by txes.id, txes.timestamp, txes.hash, blocks.height
@@ -1448,4 +1455,45 @@ func (r *txs) TotalRewardByAccount(ctx context.Context, account string) ([]*mode
 		data = append(data, &denom)
 	}
 	return data, nil
+}
+
+func (r *txs) GetEvmTransactionDetails(ctx context.Context, txHash string) (map[string]interface{}, error) {
+	query := `
+        SELECT messages.raw_message
+        FROM txes
+        JOIN messages ON txes.id = messages.tx_id
+        JOIN message_types ON messages.message_type_id = message_types.id
+        WHERE txes.hash = $1 AND message_types.message_type = '/ethermint.evm.v1.MsgEthereumTx'
+    `
+
+	var rawMessage []byte
+	err := r.db.QueryRow(ctx, query, txHash).Scan(&rawMessage)
+	if err != nil {
+		return nil, err
+	}
+
+	var evmDetails map[string]interface{}
+	if err := json.Unmarshal(rawMessage, &evmDetails); err != nil {
+		return nil, err
+	}
+
+	return evmDetails, nil
+}
+
+func (r *txs) IsEvmTransaction(ctx context.Context, txHash string) (bool, error) {
+	query := `
+        SELECT COUNT(*)
+        FROM txes
+        JOIN messages ON txes.id = messages.tx_id
+        JOIN message_types ON messages.message_type_id = message_types.id
+        WHERE txes.hash = $1 AND message_types.message_type = '/ethermint.evm.v1.MsgEthereumTx'
+    `
+
+	var count int
+	err := r.db.QueryRow(ctx, query, txHash).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
 }
