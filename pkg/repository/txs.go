@@ -354,16 +354,16 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 		return nil, 0, err
 	}
 
-	log.Debug().Msgf("=> Transactions ==> query: %s", query)
+	log.Info().Msgf("=> Transactions ==> query: %s", query)
 
 	startTime := time.Now()
-	log.Debug().Msgf("=> TransactionsByEventValue ==> transaction main start: %s", startTime.String())
+	log.Info().Msgf("=> TransactionsByEventValue ==> transaction main start: %s", startTime.String())
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		log.Err(err).Msgf("Transactions Query error")
 		return nil, 0, err
 	}
-	log.Debug().Msgf("=> TransactionsByEventValue ==> transaction main finish: %s", time.Since(startTime).String())
+	log.Info().Msgf("=> TransactionsByEventValue ==> transaction main finish: %s", time.Since(startTime).String())
 
 	result := make([]*model.Tx, 0)
 	if rows != nil {
@@ -395,7 +395,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 			tx.NonCriticalExtensionOptions = nonCriticalExtensionOptions
 
 			startTime := time.Now()
-			log.Debug().Msgf("=> TransactionsByEventValue ==> transaction loop start: %s", startTime.String())
+			log.Info().Msgf("=> TransactionsByEventValue ==> transaction loop start: %s", startTime.String())
 
 			var block *models.Block
 			if block, err = r.blockInfo(ctx, tx.BlockID); err != nil {
@@ -404,7 +404,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 			if block != nil {
 				tx.Block = *block
 			}
-			log.Debug().Msgf("=> TransactionsByEventValue ==> transaction loop block: %s", time.Since(startTime).String())
+			log.Info().Msgf("=> TransactionsByEventValue ==> transaction loop block: %s", time.Since(startTime).String())
 
 			startTime = time.Now()
 			var fees []model.Fee
@@ -412,7 +412,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 				log.Err(err).Msgf("error in feesByTransaction")
 			}
 			tx.Fees = fees
-			log.Debug().Msgf("=> TransactionsByEventValue ==> transaction loop fees: %s", time.Since(startTime).String())
+			log.Info().Msgf("=> TransactionsByEventValue ==> transaction loop fees: %s", time.Since(startTime).String())
 
 			authInfo.Fee = authInfoFee
 			authInfo.Tip = authInfoTip
@@ -425,7 +425,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 			if err == nil {
 				tx.SenderReceiver = res
 			}
-			log.Debug().Msgf("=> TransactionsByEventValue ==> transaction loop GetSenderAndReceiverV2: %s", time.Since(startTime).String())
+			log.Info().Msgf("=> TransactionsByEventValue ==> transaction loop GetSenderAndReceiverV2: %s", time.Since(startTime).String())
 
 			result = append(result, &tx)
 		}
@@ -442,7 +442,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 	}
 
 	startTime = time.Now()
-	log.Debug().Msgf("=> TransactionsByEventValue ==> transaction total: %s", startTime.String())
+	log.Info().Msgf("=> TransactionsByEventValue ==> transaction total: %s", startTime.String())
 
 	var row pgx.Row
 	if blockID >= 0 {
@@ -460,7 +460,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 		log.Err(err).Msgf("queryAll error")
 		return nil, 0, err
 	}
-	log.Debug().Msgf("=> TransactionsByEventValue ==> transaction total finish: %s", time.Since(startTime).String())
+	log.Info().Msgf("=> TransactionsByEventValue ==> transaction total finish: %s", time.Since(startTime).String())
 
 	return result, allTx, nil
 }
