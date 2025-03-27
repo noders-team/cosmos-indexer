@@ -451,7 +451,7 @@ func (r *txs) Transactions(ctx context.Context, limit int64, offset int64, filte
 	} else {
 		// TODO temporarly
 		//queryAll := `select count(*) from txes`
-		queryAll := `select count(*) from transactions_normalized`
+		queryAll := `select sum(total_tx_count) from daily_tx_counts`
 		row = r.db.QueryRow(ctx, queryAll)
 	}
 
