@@ -679,7 +679,7 @@ func (r *txs) ExtractNumber(value string) (decimal.Decimal, string, error) {
 func (r *txs) GetWalletsCount(ctx context.Context) (*model.TotalWallets, error) {
 	query := "SELECT COUNT(*) FROM (SELECT account FROM transactions_normalized %s GROUP BY account) subquery"
 
-	queryPerDate := fmt.Sprintf(query, " where date(time) = date($1)")
+	queryPerDate := fmt.Sprintf(query, " where time >= $1 AND time < $1 + INTERVAL '1 day'")
 	row := r.db.QueryRow(ctx, queryPerDate, time.Now().UTC())
 	var count24H int64
 	if err := row.Scan(&count24H); err != nil {
@@ -694,7 +694,7 @@ func (r *txs) GetWalletsCount(ctx context.Context) (*model.TotalWallets, error) 
 		count48H = 0
 	}
 
-	queryMoreDate := fmt.Sprintf(query, " where date(time) >= date($1)")
+	queryMoreDate := fmt.Sprintf(query, " where time >= $1")
 	firstDay := time.Date(time.Now().UTC().Year(), time.Now().UTC().Month(), 1, 0, 0, 0, 0, time.Local)
 	row = r.db.QueryRow(ctx, queryMoreDate, firstDay)
 	var count30D int64
@@ -715,7 +715,7 @@ func (r *txs) GetWalletsCount(ctx context.Context) (*model.TotalWallets, error) 
 }
 
 func (r *txs) GetWalletsCountPerPeriod(ctx context.Context, startDate, endDate time.Time) (int64, error) {
-	query := `SELECT COUNT(*) FROM (SELECT account FROM transactions_normalized where date(time) BETWEEN date($1) and date($2) GROUP BY account) subquery`
+	query := `SELECT COUNT(*) FROM (SELECT account FROM transactions_normalized where time BETWEEN date($1) and date($2) GROUP BY account) subquery`
 	row := r.db.QueryRow(ctx, query, startDate.UTC(), endDate.UTC())
 	var count int64
 	if err := row.Scan(&count); err != nil {
