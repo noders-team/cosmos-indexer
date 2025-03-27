@@ -207,7 +207,7 @@ func ExtractERC20TransferFromLogs(logs []interface{}) (string, string, *big.Int,
 			continue
 		}
 
-		log.Info().
+		log.Debug().
 			Str("token", tokenAddress).
 			Str("recipient", toAddr).
 			Str("amount", amount.String()).
