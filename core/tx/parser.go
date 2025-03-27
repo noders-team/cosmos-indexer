@@ -669,7 +669,7 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 			}
 			currMessages = append(currMessages, &msg)
 
-			log.Info().
+			log.Debug().
 				Str("txHash", currTxResp.Hash).
 				Str("from", currTxResp.From).
 				Str("to", currTxResp.To).
@@ -696,7 +696,7 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 							}}}
 					currMessages = append(currMessages, &msg)
 
-					log.Info().
+					log.Debug().
 						Str("txHash", currTxResp.Hash).
 						Str("from", currTxResp.From).
 						Str("tokenAmount", tokenDec.String()).
@@ -747,7 +747,7 @@ func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDB
 					messageLogs, uniqueEventTypes, uniqueEventAttributeKeys)
 				currMessageDBWrapper.Message.MessageBytes = make([]byte, 0)
 				uniqueMessageTypes[messageType] = currMessageDBWrapper.Message.MessageType
-				config.Log.Info(fmt.Sprintf("[Block: %v] [TX: %v] Found msg of type '%v'.", processedTx.Tx.Block.Height, processedTx.Tx.Hash, messageType))
+				config.Log.Debug(fmt.Sprintf("[Block: %v] [TX: %v] Found msg of type '%v'.", processedTx.Tx.Block.Height, processedTx.Tx.Hash, messageType))
 				messages = append(messages, currMessageDBWrapper)
 			}
 		}
