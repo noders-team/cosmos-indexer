@@ -17,7 +17,6 @@ jobs:
           # mainnet
           - celestia-prod
           - story-prod
-          - berachain-prod
           - nillion-prod
           - asi
 
