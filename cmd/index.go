@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/noders-team/cosmos-indexer/probe"
+
 	"gorm.io/gorm/clause"
 
 	"github.com/noders-team/cosmos-indexer/clients"
@@ -31,18 +33,13 @@ import (
 	blocks "github.com/noders-team/cosmos-indexer/proto"
 	"google.golang.org/grpc"
 
-	"github.com/nodersteam/probe/client"
-
 	"github.com/noders-team/cosmos-indexer/config"
 	"github.com/noders-team/cosmos-indexer/core"
 	dbTypes "github.com/noders-team/cosmos-indexer/db"
 	"github.com/noders-team/cosmos-indexer/db/models"
 	"github.com/noders-team/cosmos-indexer/filter"
 	"github.com/noders-team/cosmos-indexer/parsers"
-	"github.com/noders-team/cosmos-indexer/probe"
 	"github.com/spf13/cobra"
-
-	probeClient "github.com/nodersteam/probe/client"
 
 	"gorm.io/gorm"
 )
@@ -54,7 +51,7 @@ const (
 type Indexer struct {
 	cfg                                 *config.IndexConfig
 	db                                  *gorm.DB
-	cl                                  *client.ChainClient
+	cl                                  *probe.ChainClient
 	blockEventFilterRegistries          blockEventFilterRegistries
 	messageTypeFilters                  []filter.MessageTypeFilter
 	customBeginBlockEventParserRegistry map[string][]parsers.BlockEventParser // Used for associating parsers to block event types in BeginBlock events
@@ -799,7 +796,7 @@ func (idxr *Indexer) processBlocks(wg *sync.WaitGroup,
 	blockEventFilterRegistry blockEventFilterRegistries,
 	blocksCh chan *model.BlockInfo,
 	cache *repository.Cache,
-	_ *probeClient.Codec,
+	_ *probe.Codec,
 ) {
 	defer close(blockEventsDataChan)
 	defer close(txDataChan)
@@ -863,14 +860,23 @@ func (idxr *Indexer) processBlocks(wg *sync.WaitGroup,
 			var txDBWrappers []dbTypes.TxDBWrapper
 			var err error
 
-			if blockData.GetTxsResponse != nil && len(blockData.GetTxsResponse.Txs) > 0 {
-				config.Log.Infof("Processing TXs from RPC TX Search response size: %d total %d",
-					len(blockData.GetTxsResponse.Txs),
-					blockData.GetTxsResponse.Total)
-				txDBWrappers, _, err = idxr.txParser.ProcessRPCTXs(idxr.messageTypeFilters, blockData.GetTxsResponse)
-			} else if blockData.BlockResultsData != nil {
-				config.Log.Info("Processing TXs from BlockResults search response")
-				txDBWrappers, _, err = idxr.txParser.ProcessRPCBlockByHeightTXs(idxr.messageTypeFilters, blockData.BlockData, blockData.BlockResultsData)
+			switch {
+			case idxr.cfg.Base.TransactionEVMIndexingEnabled:
+				txDBWrappers, err = idxr.txParser.ProcessEvmTxs(&blockData)
+				if err == nil {
+					block.TotalTxs = len(txDBWrappers)
+				}
+				break
+			default:
+				if blockData.GetTxsResponse != nil && len(blockData.GetTxsResponse.Txs) > 0 {
+					config.Log.Infof("Processing TXs from RPC TX Search response size: %d total %d",
+						len(blockData.GetTxsResponse.Txs),
+						blockData.GetTxsResponse.Total)
+					txDBWrappers, err = idxr.txParser.ProcessRPCTXs(idxr.messageTypeFilters, blockData.GetTxsResponse)
+				} else if blockData.BlockResultsData != nil {
+					config.Log.Info("Processing TXs from BlockResults search response")
+					txDBWrappers, err = idxr.txParser.ProcessRPCBlockByHeightTXs(idxr.messageTypeFilters, blockData.BlockData, blockData.BlockResultsData)
+				}
 			}
 
 			if err != nil {

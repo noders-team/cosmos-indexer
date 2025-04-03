@@ -79,3 +79,34 @@ build:
 	go mod tidy
 	go mod vendor
 	go build -o bin/cosmos-indexer .
+
+build_bera:
+	cp -f go.mod.br go.mod
+	go mod tidy
+	go mod vendor
+	go build -o bin/cosmos-indexer .
+
+run_dev:
+	go build . && \
+		./cosmos-indexer index \
+		   --log.pretty = true \
+		   --log.level = info \
+		   --base.start-block 100000 \
+		   --base.end-block -1 \
+		   --base.throttling 2.005 \
+		   --base.rpc-workers 1 \
+		   --base.index-transactions true \
+		   --probe.rpc http://168.119.208.253:26657  \
+		   --base.index-evm-transactions true \
+		   --probe.account-prefix bera \
+		   --probe.chain-id 0x138de \
+		   --probe.chain-name bera \
+		   --probe.evm-rpc-url https://berachain-rpc.publicnode.com \
+		   --database.host postgres.cosmos-indexer.orb.local \
+		   --database.database indexer \
+		   --database.user postgres \
+		   --database.password password \
+		   --server.port 9002 \
+		   --redis.addr redis.cosmos-indexer.orb.local:6379 \
+		   --mongo.addr mongodb://admin:password@mongodb.cosmos-indexer.orb.local:27017 \
+		   --mongo.db search_indexer

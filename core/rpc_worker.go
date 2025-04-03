@@ -1,11 +1,14 @@
 package core
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/noders-team/cosmos-indexer/probe"
 
 	cmjson "github.com/cometbft/cometbft/libs/json"
 
@@ -18,8 +21,6 @@ import (
 	"github.com/noders-team/cosmos-indexer/config"
 	dbTypes "github.com/noders-team/cosmos-indexer/db"
 	"github.com/noders-team/cosmos-indexer/rpc"
-	"github.com/nodersteam/probe/client"
-	probeClient "github.com/nodersteam/probe/client"
 	"gorm.io/gorm"
 )
 
@@ -30,9 +31,10 @@ type IndexerBlockEventData struct {
 	GetTxsResponse           *txTypes.GetTxsEventResponse
 	TxRequestsFailed         bool
 	IndexTransactions        bool
+	EvmTransactions          []*dbTypes.EvmTransaction
 }
 
-func (s *IndexerBlockEventData) MarshalJSON(cdc *probeClient.Codec) ([]byte, error) {
+func (s *IndexerBlockEventData) MarshalJSON(cdc *probe.Codec) ([]byte, error) {
 	txResp, err := cdc.Marshaler.Marshal(s.GetTxsResponse)
 	if err != nil {
 		return nil, err
@@ -55,6 +57,7 @@ func (s *IndexerBlockEventData) MarshalJSON(cdc *probeClient.Codec) ([]byte, err
 		"GetTxsResponse":           base64.StdEncoding.EncodeToString(txResp),
 		"TxRequestsFailed":         s.TxRequestsFailed,
 		"IndexTransactions":        s.IndexTransactions,
+		"EvmTransactions":          s.EvmTransactions,
 	}
 
 	return json.Marshal(&data)
@@ -122,6 +125,25 @@ func (s *IndexerBlockEventData) UnmarshalJSON(data []byte) error {
 	indexTransactions, _ := mapped["IndexTransactions"]
 	s.IndexTransactions = indexTransactions.(bool)
 
+	evmTransactions, _ := mapped["EvmTransactions"]
+	if evmTransactions != nil {
+		evmTransactionList := evmTransactions.([]interface{})
+		s.EvmTransactions = make([]*dbTypes.EvmTransaction, len(evmTransactionList))
+		for i, evmTransaction := range evmTransactionList {
+			transaction := evmTransaction.(map[string]interface{})
+			tx := &dbTypes.EvmTransaction{}
+			marshaled, err := json.Marshal(transaction)
+			if err != nil {
+				return err
+			}
+			err = tx.UnmarshalJSON(marshaled)
+			if err != nil {
+				return err
+			}
+			s.EvmTransactions[i] = tx
+		}
+	}
+
 	return nil
 }
 
@@ -129,14 +151,13 @@ type BlockRPCWorker interface {
 	Worker(wg *sync.WaitGroup,
 		blockEnqueueChan chan *EnqueueData,
 		result chan<- IndexerBlockEventData)
-	FetchBlock(rpcClient rpc.URIClient,
-		block *EnqueueData) *IndexerBlockEventData
+	FetchBlock(block *EnqueueData) *IndexerBlockEventData
 }
 
 type blockRPCWorker struct {
 	chainStringID string
 	cfg           *config.IndexConfig
-	chainClient   *client.ChainClient
+	chainClient   *probe.ChainClient
 	db            *gorm.DB
 	rpcClient     clients.ChainRPC
 }
@@ -144,7 +165,7 @@ type blockRPCWorker struct {
 func NewBlockRPCWorker(
 	chainStringID string,
 	cfg *config.IndexConfig,
-	chainClient *client.ChainClient,
+	chainClient *probe.ChainClient,
 	db *gorm.DB,
 	rpcClient clients.ChainRPC,
 ) BlockRPCWorker {
@@ -164,10 +185,6 @@ func (w *blockRPCWorker) Worker(wg *sync.WaitGroup,
 	result chan<- IndexerBlockEventData,
 ) {
 	defer wg.Done()
-	rpcClient := rpc.URIClient{
-		Address: w.chainClient.Config.RPCAddr,
-		Client:  &http.Client{},
-	}
 
 	for {
 		// Get the next block to process
@@ -179,7 +196,7 @@ func (w *blockRPCWorker) Worker(wg *sync.WaitGroup,
 
 		tmStart := time.Now()
 		log.Debug().Msgf("====> picked ip block for fetching %d %s", block.Height, tmStart.String())
-		currentHeightIndexerData := w.FetchBlock(rpcClient, block)
+		currentHeightIndexerData := w.FetchBlock(block)
 		if currentHeightIndexerData == nil {
 			continue
 		}
@@ -188,14 +205,12 @@ func (w *blockRPCWorker) Worker(wg *sync.WaitGroup,
 	}
 }
 
-func (w *blockRPCWorker) FetchBlock(rpcClient rpc.URIClient, block *EnqueueData) *IndexerBlockEventData {
+func (w *blockRPCWorker) FetchBlock(block *EnqueueData) *IndexerBlockEventData {
 	currentHeightIndexerData := IndexerBlockEventData{
 		BlockEventRequestsFailed: false,
 		TxRequestsFailed:         false,
 		IndexTransactions:        block.IndexTransactions,
 	}
-
-	// Get the block from the RPC
 
 	blockData, err := w.rpcClient.GetBlock(block.Height)
 	if err != nil {
@@ -213,6 +228,30 @@ func (w *blockRPCWorker) FetchBlock(rpcClient rpc.URIClient, block *EnqueueData)
 	}
 
 	currentHeightIndexerData.BlockData = blockData
+	if block.IndexTransactions {
+		config.Log.Info("Indexing Cosmos transactions")
+		err = w.proceedCosmosTx(context.Background(), &currentHeightIndexerData, block.Height)
+		if err != nil {
+			log.Error().Msgf("Error getting txs for block %v from RPC. Err: %v", block.Height, err)
+			return nil
+		}
+	}
+
+	if block.IndexEVMTransactions {
+		config.Log.Info("Indexing EVM transactions")
+		err = w.proceedEvmTx(context.Background(), &currentHeightIndexerData, block.Height)
+		if err != nil {
+			log.Error().Msgf("Error getting txs for block %v from RPC. Err: %v", block.Height, err)
+			return nil
+		}
+	}
+
+	return &currentHeightIndexerData
+}
+
+func (w *blockRPCWorker) proceedCosmosTx(ctx context.Context, currentHeightIndexerData *IndexerBlockEventData, blockHeight int64) error {
+	txsEventResp, err := w.rpcClient.GetTxsByBlockHeight(blockHeight)
+
 	retryAttempts := int64(5)
 	if w.cfg != nil {
 		retryAttempts = w.cfg.Base.RequestRetryAttempts
@@ -223,35 +262,42 @@ func (w *blockRPCWorker) FetchBlock(rpcClient rpc.URIClient, block *EnqueueData)
 		retryMaxWait = w.cfg.Base.RequestRetryMaxWait
 	}
 
-	if block.IndexTransactions {
-		txsEventResp, err := w.rpcClient.GetTxsByBlockHeight(block.Height)
-
-		if err != nil {
-			// Attempt to get block results to attempt an in-app codec decode of transactions.
-			if currentHeightIndexerData.BlockResultsData == nil {
-
-				bresults, err := rpc.GetBlockResultWithRetry(rpcClient, block.Height,
-					retryAttempts, retryMaxWait)
-
-				if err != nil {
-					config.Log.Errorf("Error getting txs for block %v from RPC. Err: %v", block, err)
-					err := dbTypes.UpsertFailedBlock(w.db, block.Height, w.chainStringID, w.cfg.Probe.ChainName)
-					if err != nil {
-						config.Log.Fatal("Failed to insert failed block", err)
-					}
-					currentHeightIndexerData.GetTxsResponse = nil
-					currentHeightIndexerData.BlockResultsData = nil
-					// Only set failed when we can't get the block results either.
-					currentHeightIndexerData.TxRequestsFailed = true
-				} else {
-					currentHeightIndexerData.BlockResultsData = bresults
-				}
-
-			}
-		} else {
-			currentHeightIndexerData.GetTxsResponse = txsEventResp
+	if err != nil {
+		rpcClient := rpc.URIClient{
+			Address: w.chainClient.Config.RPCAddr,
+			Client:  &http.Client{},
 		}
+
+		if currentHeightIndexerData.BlockResultsData == nil {
+			bresults, err := rpc.GetBlockResultWithRetry(rpcClient, blockHeight,
+				retryAttempts, retryMaxWait)
+			if err != nil {
+				config.Log.Errorf("Error getting txs for block %v from RPC. Err: %v", blockHeight, err)
+				err := dbTypes.UpsertFailedBlock(w.db, blockHeight, w.chainStringID, w.cfg.Probe.ChainName)
+				if err != nil {
+					config.Log.Fatal("Failed to insert failed block", err)
+				}
+				currentHeightIndexerData.GetTxsResponse = nil
+				currentHeightIndexerData.BlockResultsData = nil
+				currentHeightIndexerData.TxRequestsFailed = true
+			} else {
+				currentHeightIndexerData.BlockResultsData = bresults
+			}
+		}
+	} else {
+		currentHeightIndexerData.GetTxsResponse = txsEventResp
 	}
 
-	return &currentHeightIndexerData
+	return nil
+}
+
+func (w *blockRPCWorker) proceedEvmTx(ctx context.Context, currentHeightIndexerData *IndexerBlockEventData, blockHeight int64) error {
+	txsEventResp, err := w.rpcClient.GetEvmTxsByBlockHeight(blockHeight, currentHeightIndexerData.BlockData.Block.Time)
+	if err != nil {
+		return err
+	}
+	log.Info().Msgf("EVM txs for block %d: %d", blockHeight, len(txsEventResp))
+	currentHeightIndexerData.EvmTransactions = txsEventResp
+
+	return nil
 }

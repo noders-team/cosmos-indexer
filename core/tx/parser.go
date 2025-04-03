@@ -2,62 +2,58 @@ package tx
 
 import (
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 	"time"
 	"unsafe"
 
-	"github.com/noders-team/cosmos-indexer/pkg/model"
+	banktypes "cosmossdk.io/x/bank/types"
 
-	"github.com/rs/zerolog/log"
-
-	"github.com/noders-team/cosmos-indexer/core"
-	"github.com/shopspring/decimal"
+	"cosmossdk.io/math"
+	"github.com/noders-team/cosmos-indexer/probe"
 
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/cosmos/cosmos-sdk/types"
 	cosmosTx "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/noders-team/cosmos-indexer/config"
+	"github.com/noders-team/cosmos-indexer/core"
 	txtypes "github.com/noders-team/cosmos-indexer/cosmos/modules/tx"
 	dbTypes "github.com/noders-team/cosmos-indexer/db"
 	"github.com/noders-team/cosmos-indexer/filter"
-	"github.com/nodersteam/probe/client"
+	"github.com/noders-team/cosmos-indexer/pkg/model"
+	"github.com/rs/zerolog/log"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
 type Parser interface {
 	ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageTypeFilter,
-		blockResults *coretypes.ResultBlock, resultBlockRes *coretypes.ResultBlockResults) ([]dbTypes.TxDBWrapper, *time.Time, error)
+		blockResults *coretypes.ResultBlock, resultBlockRes *coretypes.ResultBlockResults) ([]dbTypes.TxDBWrapper, error)
 	ProcessRPCTXs(messageTypeFilters []filter.MessageTypeFilter,
-		txEventResp *cosmosTx.GetTxsEventResponse) ([]dbTypes.TxDBWrapper, *time.Time, error)
+		txEventResp *cosmosTx.GetTxsEventResponse) ([]dbTypes.TxDBWrapper, error)
+	ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDBWrapper, error)
 }
 
 type parser struct {
 	db        *gorm.DB
-	cl        *client.ChainClient
+	cl        *probe.ChainClient
 	processor Processor
 }
 
-func NewParser(db *gorm.DB, cl *client.ChainClient, processor Processor) Parser {
+func NewParser(db *gorm.DB, cl *probe.ChainClient, processor Processor) Parser {
 	return &parser{db: db, cl: cl, processor: processor}
 }
 
 func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageTypeFilter,
 	blockResults *coretypes.ResultBlock, resultBlockRes *coretypes.ResultBlockResults,
-) ([]dbTypes.TxDBWrapper, *time.Time, error) {
-	if len(blockResults.Block.Txs) != len(resultBlockRes.TxsResults) {
-		log.Error().Msgf("blockResults & resultBlockRes: different length %d != %d", len(blockResults.Block.Txs), len(resultBlockRes.TxsResults))
-		return nil, nil, errors.New("blockResults & resultBlockRes: different length")
-	}
-
+) ([]dbTypes.TxDBWrapper, error) {
 	blockTime := &blockResults.Block.Time
 	blockTimeStr := blockTime.Format(time.RFC3339)
 	currTxDbWrappers := make([]dbTypes.TxDBWrapper, len(blockResults.Block.Txs))
 
 	for txIdx, tendermintTx := range blockResults.Block.Txs {
-		txResult := resultBlockRes.TxsResults[txIdx]
+		txResult := resultBlockRes.TxResults[txIdx]
 
 		// Indexer types only used by the indexer app (similar to the cosmos types)
 		var indexerMergedTx txtypes.MergedTx
@@ -65,23 +61,30 @@ func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageT
 		var txBody txtypes.Body
 		var currMessages []types.Msg
 		var currLogMsgs []txtypes.LogMessage
+		var err error
 
-		txDecoder := a.cl.Codec.TxConfig.TxDecoder()
+		txFull, err := core.Decode(a.cl.Codec, []byte(tendermintTx.String()))
+		if err != nil {
+			log.Info().Msgf("error decoding transaction from: %s", tendermintTx.String())
+			return nil, err
+		}
+
+		/*txDecoder := a.cl.Codec.TxConfig.TxDecoder()
 
 		txBasic, err := txDecoder(tendermintTx)
-		var txFull *cosmosTx.Tx
+		var txFull cosmosTx.Tx
 		if err != nil {
 			txBasic, err = core.InAppTxDecoder(a.cl.Codec)(tendermintTx)
 			if err != nil {
 				return nil, blockTime, fmt.Errorf("ProcessRPCBlockByHeightTXs: TX cannot be parsed from block %v. This is usually a proto definition error. Err: %v", blockResults.Block.Height, err)
 			}
-			txFull = txBasic.(*cosmosTx.Tx)
+			txFull = txBasic
 		} else {
 			// This is a hack, but as far as I can tell necessary. "wrapper" struct is private in Cosmos SDK.
 			field := reflect.ValueOf(txBasic).Elem().FieldByName("tx")
 			iTx := a.getUnexportedField(field)
-			txFull = iTx.(*cosmosTx.Tx)
-		}
+			txFull = iTx.(cosmosTx.Tx)
+		}*/
 
 		logs := types.ABCIMessageLogs{}
 		// Failed TXs do not have proper JSON in the .Log field, causing ParseABCILogs to fail to unmarshal the logs
@@ -119,7 +122,7 @@ func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageT
 			shouldIndex, err := a.messageTypeShouldIndex(txFull.Body.Messages[msgIdx].TypeUrl, messageTypeFilters)
 			if err != nil {
 				config.Log.Error("messageTypeShouldIndex", err)
-				return nil, blockTime, err
+				return nil, err
 			}
 
 			if !shouldIndex {
@@ -181,10 +184,11 @@ func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageT
 		processedTx, _, err := a.processor.ProcessTx(indexerMergedTx, messagesRaw)
 		if err != nil {
 			config.Log.Error("ProcessTx", err)
-			return currTxDbWrappers, blockTime, err
+			return currTxDbWrappers, err
 		}
 
 		filteredSigners := []types.AccAddress{}
+		/* TODO, not in new cosmos SDK
 		for _, filteredMessage := range txBody.Messages {
 			if filteredMessage != nil {
 				err := filteredMessage.ValidateBasic()
@@ -194,12 +198,12 @@ func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageT
 				}
 				filteredSigners = append(filteredSigners, filteredMessage.GetSigners()...)
 			}
-		}
+		}*/
 
 		signers, signerInfos, err := a.processor.ProcessSigners(txFull.AuthInfo, filteredSigners)
 		if err != nil {
 			config.Log.Error("ProcessSigners", err)
-			return currTxDbWrappers, blockTime, err
+			return currTxDbWrappers, err
 		}
 
 		processedTx.Tx.SignerAddresses = signers
@@ -207,7 +211,7 @@ func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageT
 		fees, err := a.processor.ProcessFees(indexerTx.AuthInfo, signers)
 		if err != nil {
 			config.Log.Error("ProcessFees", err)
-			return currTxDbWrappers, blockTime, err
+			return currTxDbWrappers, err
 		}
 
 		processedTx.Tx.Fees = fees
@@ -270,15 +274,14 @@ func (a *parser) ProcessRPCBlockByHeightTXs(messageTypeFilters []filter.MessageT
 		currTxDbWrappers[txIdx] = processedTx
 	}
 
-	return currTxDbWrappers, blockTime, nil
+	return currTxDbWrappers, nil
 }
 
 // ProcessRPCTXs - Given an RPC response, build out the more specific data used by the parser.
 func (a *parser) ProcessRPCTXs(messageTypeFilters []filter.MessageTypeFilter,
 	txEventResp *cosmosTx.GetTxsEventResponse,
-) ([]dbTypes.TxDBWrapper, *time.Time, error) {
+) ([]dbTypes.TxDBWrapper, error) {
 	currTxDbWrappers := make([]dbTypes.TxDBWrapper, len(txEventResp.Txs))
-	var blockTime *time.Time
 
 	for txIdx := range txEventResp.Txs {
 		// Indexer types only used by the indexer app (similar to the cosmos types)
@@ -297,7 +300,7 @@ func (a *parser) ProcessRPCTXs(messageTypeFilters []filter.MessageTypeFilter,
 
 			shouldIndex, err := a.messageTypeShouldIndex(currTx.Body.Messages[msgIdx].TypeUrl, messageTypeFilters)
 			if err != nil {
-				return nil, blockTime, err
+				return nil, err
 			}
 
 			if !shouldIndex {
@@ -376,36 +379,33 @@ func (a *parser) ProcessRPCTXs(messageTypeFilters []filter.MessageTypeFilter,
 		indexerMergedTx.Tx = indexerTx
 		indexerMergedTx.Tx.AuthInfo = *currTx.AuthInfo
 
-		processedTx, txTime, err := a.processor.ProcessTx(indexerMergedTx, messagesRaw)
+		processedTx, _, err := a.processor.ProcessTx(indexerMergedTx, messagesRaw)
 		if err != nil {
-			return currTxDbWrappers, blockTime, err
-		}
-
-		if blockTime == nil {
-			blockTime = &txTime
+			return currTxDbWrappers, err
 		}
 
 		filteredSigners := make([]types.AccAddress, 0)
-		for _, filteredMessage := range txBody.Messages {
-			if filteredMessage != nil {
-				filteredSigners = append(filteredSigners, filteredMessage.GetSigners()...)
-			}
-		}
+		/*
+			for _, filteredMessage := range txBody.Messages {
+				if filteredMessage != nil {
+					filteredSigners = append(filteredSigners, filteredMessage.GetSigners()...)
+				}
+			}*/
 
 		err = currTx.AuthInfo.UnpackInterfaces(a.cl.Codec.InterfaceRegistry)
 		if err != nil {
-			return currTxDbWrappers, blockTime, err
+			return currTxDbWrappers, err
 		}
 
 		signers, signerInfos, err := a.processor.ProcessSigners(currTx.AuthInfo, filteredSigners)
 		if err != nil {
-			return currTxDbWrappers, blockTime, err
+			return currTxDbWrappers, err
 		}
 		processedTx.Tx.SignerAddresses = signers
 
 		fees, err := a.processor.ProcessFees(indexerTx.AuthInfo, signers)
 		if err != nil {
-			return currTxDbWrappers, blockTime, err
+			return currTxDbWrappers, err
 		}
 
 		processedTx.Tx.Fees = fees
@@ -466,7 +466,7 @@ func (a *parser) ProcessRPCTXs(messageTypeFilters []filter.MessageTypeFilter,
 		currTxDbWrappers[txIdx] = processedTx
 	}
 
-	return currTxDbWrappers, blockTime, nil
+	return currTxDbWrappers, nil
 }
 
 func (a *parser) messageTypeShouldIndex(messageType string, filters []filter.MessageTypeFilter) (bool, error) {
@@ -524,8 +524,6 @@ func tendermintHashToHex(hash []byte) string {
 // TODO: Remove this map and replace with a more generic solution
 var messageTypeHandler = map[string][]func() txtypes.CosmosMessage{}
 
-// var messageTypeIgnorer = map[string]interface{}{}
-
 // Merge the chain specific message type handlers into the core message type handler map.
 // Chain specific handlers will be registered BEFORE any generic handlers.
 // TODO: Remove this function and replace with a more generic solution
@@ -538,4 +536,234 @@ func ChainSpecificMessageTypeHandlerBootstrap(chainID string) {
 			messageTypeHandler[key] = value
 		}
 	}
+}
+
+func (a *parser) ProcessEvmTxs(data *core.IndexerBlockEventData) ([]dbTypes.TxDBWrapper, error) {
+	if len(data.EvmTransactions) == 0 {
+		log.Warn().Msgf("No EVM transactions to process, block %d", data.BlockData.Block.Height)
+		return nil, nil
+	}
+	currTxDbWrappers := make([]dbTypes.TxDBWrapper, len(data.EvmTransactions))
+
+	log.Info().
+		Int64("blockHeight", data.BlockData.Block.Height).
+		Int("transactionCount", len(data.EvmTransactions)).
+		Msg("Processing EVM transactions")
+
+	for txIdx := range data.EvmTransactions {
+		var indexerMergedTx txtypes.MergedTx
+		var indexerTx txtypes.IndexerTx
+		var txBody txtypes.Body
+		var currLogMsgs []txtypes.LogMessage
+		var currMessages []types.Msg
+		var messagesRaw [][]byte
+
+		indexerTx.Body = txBody
+
+		currTxResp := data.EvmTransactions[txIdx]
+		indexerTxResp := txtypes.Response{
+			TxHash:    currTxResp.Hash,
+			Height:    fmt.Sprintf("%d", currTxResp.BlockNumber),
+			TimeStamp: currTxResp.Timestamp.String(),
+			RawLog:    currTxResp.Data,
+			Log:       currLogMsgs,
+			Code:      uint32(currTxResp.Status),
+			GasUsed:   int64(currTxResp.Gas),
+			GasWanted: int64(currTxResp.Gas),
+			Info:      "",
+			Data:      string(currTxResp.Data),
+		}
+
+		authInfo := cosmosTx.AuthInfo{
+			Fee: &cosmosTx.Fee{
+				Amount: []types.Coin{
+					{
+						Denom:  "eth", // TODO
+						Amount: math.NewInt(int64(currTxResp.Gas)),
+					},
+				},
+				GasLimit: currTxResp.Gas,                               // TODO
+				Payer:    "0x0000000000000000000000000000000000000000", // TODO
+			},
+			SignerInfos: make([]*cosmosTx.SignerInfo, 0),
+		}
+
+		indexerTx.AuthInfo = authInfo
+		indexerMergedTx.TxResponse = indexerTxResp
+		indexerMergedTx.Tx = indexerTx
+		indexerMergedTx.Tx.AuthInfo = authInfo
+
+		processedTx, _, err := a.processor.ProcessTx(indexerMergedTx, messagesRaw)
+		if err != nil {
+			return currTxDbWrappers, err
+		}
+
+		filteredSigners := make([]types.AccAddress, 0)
+
+		signers, signerInfos, err := a.processor.ProcessSigners(&authInfo, filteredSigners)
+		if err != nil {
+			return currTxDbWrappers, err
+		}
+		processedTx.Tx.SignerAddresses = signers
+
+		fees, err := a.processor.ProcessFees(indexerTx.AuthInfo, signers)
+		if err != nil {
+			return currTxDbWrappers, err
+		}
+
+		processedTx.Tx.Fees = fees
+
+		// extra fields
+		// processedTx.Tx.Signatures = []byte("")
+		processedTx.Tx.Memo = ""
+		processedTx.Tx.TimeoutHeight = 0
+
+		extensionOptions := make([]string, 0)
+		processedTx.Tx.ExtensionOptions = extensionOptions
+
+		nonExtensionOptions := make([]string, 0)
+		processedTx.Tx.NonCriticalExtensionOptions = nonExtensionOptions
+		processedTx.Tx.TxResponse = model.TxResponse{
+			TxHash:    indexerTxResp.TxHash,
+			Height:    indexerTxResp.Height,
+			TimeStamp: indexerTxResp.TimeStamp,
+			Code:      indexerTxResp.Code,
+			RawLog:    indexerTxResp.RawLog,
+			GasUsed:   indexerTxResp.GasUsed,
+			GasWanted: indexerTxResp.GasWanted,
+			Codespace: indexerTxResp.Codespace,
+		}
+
+		txAuthInfo := model.AuthInfo{
+			Fee: model.AuthInfoFee{
+				Granter:  authInfo.Fee.Granter,
+				Payer:    authInfo.Fee.Payer,
+				GasLimit: authInfo.Fee.GasLimit,
+			},
+			SignerInfos: signerInfos,
+		}
+		if authInfo.Tip != nil {
+			tipAmount := make([]model.TipAmount, 0)
+			for _, a := range authInfo.Tip.Amount {
+				tipAmount = append(tipAmount, model.TipAmount{
+					Denom:  a.Denom,
+					Amount: decimal.NewFromInt(a.Amount.Int64()),
+				})
+			}
+			txAuthInfo.Tip = model.Tip{
+				Tipper: authInfo.Tip.Tipper,
+				Amount: tipAmount,
+			}
+		}
+
+		processedTx.Tx.AuthInfo = txAuthInfo
+
+		// processing messages
+		dec, err := decimal.NewFromString(currTxResp.Value)
+		if err == nil {
+			coins := []types.Coin{types.NewCoin("eth", math.NewInt(dec.IntPart()))}
+			msg := banktypes.MsgSend{
+				FromAddress: currTxResp.From,
+				ToAddress:   currTxResp.To,
+				Amount:      coins,
+			}
+			currMessages = append(currMessages, &msg)
+
+			log.Debug().
+				Str("txHash", currTxResp.Hash).
+				Str("from", currTxResp.From).
+				Str("to", currTxResp.To).
+				Str("value", currTxResp.Value).
+				Msg("Adding native token transfer message")
+		}
+
+		if currTxResp.TokenTransfer != nil && currTxResp.TokenTransfer.Amount != "" {
+			tokenDec, err := decimal.NewFromString(currTxResp.TokenTransfer.Amount)
+			if err == nil {
+				if tokenDec.IntPart() > 0 {
+					coins := []types.Coin{types.NewCoin("eth", math.NewInt(tokenDec.IntPart()))}
+					msg := banktypes.MsgMultiSend{
+						Inputs: []banktypes.Input{
+							banktypes.Input{
+								Address: currTxResp.TokenTransfer.Address,
+								Coins:   coins,
+							},
+						},
+						Outputs: []banktypes.Output{
+							banktypes.Output{
+								Address: currTxResp.TokenTransfer.Receiver,
+								Coins:   coins,
+							}}}
+					currMessages = append(currMessages, &msg)
+
+					log.Debug().
+						Str("txHash", currTxResp.Hash).
+						Str("from", currTxResp.From).
+						Str("tokenAmount", tokenDec.String()).
+						Str("tokenAddress", currTxResp.TokenTransfer.Address).
+						Msg("Added ERC-20 token transfer message")
+				}
+			} else {
+				log.Err(err).Msgf("Failed to add token transfer message %s transfer amount %s",
+					tokenDec, currTxResp.TokenTransfer.Amount)
+			}
+		}
+
+		indexerMergedTx.Tx.Body.Messages = currMessages
+
+		var messages []dbTypes.MessageDBWrapper
+		uniqueMessageTypes := make(map[string]model.MessageType)
+		uniqueEventTypes := make(map[string]model.MessageEventType)
+		uniqueEventAttributeKeys := make(map[string]model.MessageEventAttributeKey)
+		for messageIndex, message := range currMessages {
+			if message != nil {
+				var messageLogs []txtypes.LogMessage
+				var events []txtypes.LogMessageEvent
+
+				events = append(events, txtypes.LogMessageEvent{
+					Type: "transfer",
+					Attributes: []txtypes.Attribute{
+						{
+							Key:   "sender",
+							Value: currTxResp.From,
+						},
+						{
+							Key:   "recipient",
+							Value: currTxResp.To,
+						},
+						{
+							Key:   "amount",
+							Value: currTxResp.Value,
+						},
+					},
+				})
+
+				messageLogs = append(messageLogs, txtypes.LogMessage{
+					MessageIndex: messageIndex,
+					Events:       events,
+				})
+
+				messageType, currMessageDBWrapper := a.processor.ProcessMessage(messageIndex, message,
+					messageLogs, uniqueEventTypes, uniqueEventAttributeKeys)
+				currMessageDBWrapper.Message.MessageBytes = make([]byte, 0)
+				uniqueMessageTypes[messageType] = currMessageDBWrapper.Message.MessageType
+				config.Log.Debug(fmt.Sprintf("[Block: %v] [TX: %v] Found msg of type '%v'.", processedTx.Tx.Block.Height, processedTx.Tx.Hash, messageType))
+				messages = append(messages, currMessageDBWrapper)
+			}
+		}
+
+		processedTx.Messages = messages
+		processedTx.UniqueMessageTypes = uniqueMessageTypes
+		processedTx.UniqueMessageAttributeKeys = uniqueEventAttributeKeys
+		processedTx.UniqueMessageEventTypes = uniqueEventTypes
+
+		currTxDbWrappers[txIdx] = processedTx
+	}
+
+	log.Info().
+		Int64("blockHeight", data.BlockData.Block.Height).
+		Int("totalTxs", len(data.EvmTransactions)).
+		Msg("Finished processing EVM transactions with message creation")
+
+	return currTxDbWrappers, nil
 }
