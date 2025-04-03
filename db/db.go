@@ -162,7 +162,7 @@ FROM txes
          LEFT JOIN message_event_attribute_keys ON message_event_attributes.message_event_attribute_key_id = message_event_attribute_keys.id
          LEFT JOIN message_event_attributes amount ON message_events.id = amount.message_event_id
          LEFT JOIN message_event_attribute_keys amount_key ON amount.message_event_attribute_key_id = amount_key.id
-WHERE message_event_attribute_keys.key IN ('sender','receiver') and message_types.message_type='/cosmos.bank.v1beta1.MsgSend'
+WHERE message_event_attribute_keys.key IN ('sender','receiver') and message_types.message_type IN ('/cosmos.bank.v1beta1.MsgSend', '/ethermint.evm.v1.MsgEthereumTx')
 GROUP BY message_event_attributes.value, txes.hash, txes.timestamp, txes.id, blocks.height, message_types.message_type, message_event_attribute_keys.key;
 `
 	err := db.Exec(query).Error
