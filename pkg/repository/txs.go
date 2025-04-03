@@ -672,19 +672,19 @@ func (r *txs) ExtractNumber(value string) (decimal.Decimal, string, error) {
 }
 
 func (r *txs) GetWalletsCount(ctx context.Context) (*model.TotalWallets, error) {
-	query := `select count(distinct account) from transactions_normalized`
+	query := "SELECT COUNT(*) FROM (SELECT account FROM transactions_normalized %s GROUP BY account) subquery"
 	queryPerDate := fmt.Sprintf(query, " where time >= $1 AND time < $1 + INTERVAL '1 day'")
 	row := r.db.QueryRow(ctx, queryPerDate, time.Now().UTC())
 	var count24H int64
 	if err := row.Scan(&count24H); err != nil {
-		log.Err(err).Msgf("GetWalletsCount: rows error")
+		log.Err(err).Msgf("GetWalletsCount: rows error queryPerDate")
 		count24H = 0
 	}
 
 	row = r.db.QueryRow(ctx, queryPerDate, time.Now().UTC().Add(-24*time.Hour))
 	var count48H int64
 	if err := row.Scan(&count48H); err != nil {
-		log.Err(err).Msgf("GetWalletsCount: rows error")
+		log.Err(err).Msgf("GetWalletsCount: rows error count48H")
 		count48H = 0
 	}
 
@@ -693,7 +693,7 @@ func (r *txs) GetWalletsCount(ctx context.Context) (*model.TotalWallets, error) 
 	row = r.db.QueryRow(ctx, queryMoreDate, firstDay)
 	var count30D int64
 	if err := row.Scan(&count30D); err != nil {
-		log.Err(err).Msgf("GetWalletsCount: rows error")
+		log.Err(err).Msgf("GetWalletsCount: rows error queryMoreDate")
 		count30D = 0
 	}
 
@@ -775,7 +775,7 @@ func (r *txs) GetWalletsWithTx(ctx context.Context, limit int64, offset int64) (
 }
 
 func (r *txs) TxCountByAccounts(ctx context.Context, accounts []string) ([]*model.WalletWithTxs, error) {
-	query := `SELECT account, count(distinct tx_hash) from transactions_normalized where account=ANY($1) GROUP BY account`
+	query := `SELECT account, count(tx_hash) from transactions_normalized where account=ANY($1) GROUP BY account`
 	rows, err := r.db.Query(ctx, query, accounts)
 	if err != nil {
 		return nil, err
