@@ -316,6 +316,32 @@ GROUP BY DATE(timestamp) ORDER BY DATE(timestamp) DESC;`
 		return err
 	}
 
+	queryWalletsDaily := `
+CREATE MATERIALIZED VIEW IF NOT EXISTS daily_wallets_counts AS
+SELECT
+    DATE(txes.timestamp) AS day,
+    COUNT(DISTINCT message_event_attributes.value) AS unique_wallets_count
+FROM txes
+LEFT JOIN messages ON txes.id = messages.tx_id
+LEFT JOIN message_events ON messages.id = message_events.message_id
+LEFT JOIN message_event_attributes ON message_events.id = message_event_attributes.message_event_id
+LEFT JOIN message_event_attribute_keys ON message_event_attributes.message_event_attribute_key_id = message_event_attribute_keys.id
+LEFT JOIN message_types ON messages.message_type_id = message_types.id
+WHERE
+    message_event_attribute_keys.key IN ('sender', 'receiver')
+    AND message_types.message_type IN ('/cosmos.bank.v1beta1.MsgSend', '/ethermint.evm.v1.MsgEthereumTx')
+    AND txes.timestamp >= NOW() - INTERVAL '360 days'
+GROUP BY DATE(txes.timestamp)
+ORDER BY DATE(txes.timestamp) DESC;`
+	if err = db.Exec(queryWalletsDaily).Error; err != nil {
+		return err
+	}
+
+	queryWalletsDailyIdx := `CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_wallets_counts ON daily_wallets_counts(day);`
+	if err = db.Exec(queryWalletsDailyIdx).Error; err != nil {
+		return err
+	}
+
 	log.Info().Msgf("Migrating tables - DONE")
 	return nil
 }
