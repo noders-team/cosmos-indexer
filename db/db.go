@@ -170,22 +170,42 @@ GROUP BY message_event_attributes.value, txes.hash, txes.timestamp, txes.id, blo
 		return err
 	}
 
-	queryIndexes := `CREATE INDEX IF NOT EXISTS idx_transactions_normalized_account
-    ON transactions_normalized (account);
-CREATE INDEX IF NOT EXISTS idx_account_tx_hash 
-	ON transactions_normalized(account, tx_hash);`
-	if err = db.Exec(queryIndexes).Error; err != nil {
+	queryIndexesAccount := `CREATE INDEX IF NOT EXISTS idx_transactions_normalized_account
+    ON transactions_normalized (account);`
+	if err = db.Exec(queryIndexesAccount).Error; err != nil {
 		return err
 	}
 
-	queryIndexes = `DROP INDEX IF EXISTS idx_account_tx_hash;`
-	if err = db.Exec(queryIndexes).Error; err != nil {
-		return err
-	}
+	queryIndexesTxHash := `DO $$
+BEGIN
+  -- Check if the index exists
+  IF EXISTS (
+    SELECT 1
+    FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND tablename = 'transactions_normalized'
+      AND indexname = 'idx_account_tx_hash'
+  ) THEN
+    -- Check if it has the right definition
+    PERFORM 1
+    FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND tablename = 'transactions_normalized'
+      AND indexname = 'idx_account_tx_hash'
+      AND indexdef ILIKE '%UNIQUE INDEX%ON transactions_normalized USING btree (account, tx_hash, tx_type)%';
 
-	queryIndexes = `CREATE UNIQUE INDEX IF NOT EXISTS idx_account_tx_hash 
-	ON transactions_normalized(account, tx_hash, tx_type);`
-	if err = db.Exec(queryIndexes).Error; err != nil {
+    -- If it doesn't match, drop and recreate
+    IF NOT FOUND THEN
+      DROP INDEX IF EXISTS idx_account_tx_hash;
+      CREATE UNIQUE INDEX idx_account_tx_hash ON transactions_normalized(account, tx_hash, tx_type);
+    END IF;
+
+  ELSE
+    -- Index doesn't exist, create it
+    CREATE UNIQUE INDEX idx_account_tx_hash ON transactions_normalized(account, tx_hash, tx_type);
+  END IF;
+END$$;`
+	if err = db.Exec(queryIndexesTxHash).Error; err != nil {
 		return err
 	}
 
