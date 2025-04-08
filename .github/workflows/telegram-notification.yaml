@@ -1,0 +1,31 @@
+name: Telegram Notification
+
+on:
+  workflow_run:
+    workflows:
+      - "*"
+    types:
+      - completed
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Send Telegram notification
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_INDEXER_DEPLOYMENTS_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_DEPLOYMENTS_BOT_TOKEN }}
+          format: markdown
+          message: |
+            *GitHub Actions Workflow Notification*
+            
+            *Workflow*: ${{ github.event.workflow_run.name }}
+            *Status*: ${{ github.event.workflow_run.conclusion == 'success' && '✅ Success' || github.event.workflow_run.conclusion == 'failure' && '❌ Failed' || github.event.workflow_run.conclusion == 'cancelled' && '⚠️ Cancelled' || github.event.workflow_run.conclusion }}
+            *Branch/Tag*: ${{ github.event.workflow_run.head_branch }}
+            
+            *Triggered by*: ${{ github.event.workflow_run.triggering_actor.login }}
+            *Repository*: ${{ github.repository }}
+            
+            *Workflow run URL*: ${{ github.event.workflow_run.html_url }}
